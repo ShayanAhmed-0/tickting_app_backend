@@ -1,15 +1,15 @@
 import { Request } from "express";
-import { RoleEnums } from "../../constants/enums";
+import { UserRole } from "../../models";
 
 export interface CustomRequest extends Request {
   authId?: string;
   email?: string;
-  role?: keyof typeof RoleEnums
+  role?: UserRole
 }
 
 export interface JwtPayload {
   authId: string;
-  role: keyof typeof RoleEnums
+  role: UserRole
   profileId?: string;
   email: string;
 }

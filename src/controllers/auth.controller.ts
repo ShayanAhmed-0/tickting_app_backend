@@ -105,7 +105,7 @@ export const login = async (req: Request, res: Response) => {
     const token = generateToken({
       email: email,
       authId: String(user._id),
-      role: user.role,
+      role: user.role as UserRole,
     });
 
     // Convert to plain object and remove sensitive fields
@@ -199,7 +199,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
       const token = generateToken({
         email: user.email,
         authId: userId,
-        role: user.role,
+        role: user.role as UserRole,
       });
       return ResponseUtil.successResponse(
         res,

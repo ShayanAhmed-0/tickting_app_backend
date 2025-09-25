@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { Response, NextFunction } from "express";
 import AuthConfig from "../config/authConfig";
 import { CustomRequest, JwtPayload } from "../interfaces/auth";
+import { UserRole } from "../models";
 
 export const checkAdminAuth = (
     req: CustomRequest,
@@ -26,7 +27,7 @@ export const checkAdminAuth = (
         req.email = decodedPayload.email;
         req.role = decodedPayload.role;
 
-        if (req.role === "Admin") {
+        if (req.role === UserRole.SUPER_ADMIN) {
             next();
         } else {
             res.status(403).json({ message: `Required role is admin current role: ${req.role}` });
