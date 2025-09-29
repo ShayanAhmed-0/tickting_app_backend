@@ -19,7 +19,6 @@ const AuthSchema = new Schema(
   {
     email: { type: Schema.Types.String, requried: true, unique: true },
     password: { type: Schema.Types.String, requried: true },
-    salt: { type: Schema.Types.String, requried: true },
     role: {
       type: Schema.Types.String,
       enum: UserRole,

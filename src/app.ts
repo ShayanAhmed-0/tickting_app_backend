@@ -12,11 +12,14 @@ import authRoutes from "./routes/auth.routes";
 import adminMiscRoutes from "./routes/admin/misc.routes";
 import miscRoutes from "./routes/misc.routes";
 import webRoutes from "./routes/web/general.routes";
+import crypto from "crypto";
 
 dotenv.config();
 
 const app = express();
-
+if(!globalThis.crypto){
+  globalThis.crypto = crypto as any;
+}
 connectDB();
 app.get("/", (req: Request, res: Response) => {
   return res.json({ message: "Welcome to Los-Mismos api" });

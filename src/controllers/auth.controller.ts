@@ -21,6 +21,7 @@ import { OtpTypes, UserRole } from "../models";
 import DeviceModel from "../models/device.model";
 import { generateRegistrationOptions } from "@simplewebauthn/server";
 import { randomInt } from "crypto";
+import ChallengeModel from "../models/challenge.model";
 
 export const signup = async (req: Request, res: Response) => {
   try {
@@ -83,7 +84,6 @@ export const signup = async (req: Request, res: Response) => {
     // Convert to plain object and remove sensitive fields
     const userObj = user.toObject();
     delete userObj.password;
-    delete userObj.salt;
 
     return ResponseUtil.successResponse(
       res,
@@ -111,10 +111,9 @@ export const login = async (req: Request, res: Response) => {
       );
     }
 
-    const hashPassword = await bcrypt.hash(password, user.salt!);
-    const hashpass = compareSync(password, hashPassword);
+    const hashPassword = await bcrypt.compareSync(password, user.password!)
 
-    if (!hashpass) {
+    if (!hashPassword) {
       throw new CustomError(
         STATUS_CODES.BAD_REQUEST,
         AUTH_CONSTANTS.PASSWORD_MISMATCH
@@ -129,7 +128,6 @@ export const login = async (req: Request, res: Response) => {
     // Convert to plain object and remove sensitive fields
     const userObj = user.toObject();
     delete userObj.password;
-    delete userObj.salt;
     console.log(userObj);
 
     const checkDevice = await DeviceModel.findOne({ deviceToken });
@@ -399,7 +397,11 @@ export const createChallange = async (req: CustomRequest, res: Response) => {
       //   },
       // ],
     })
-    
+    await ChallengeModel.create({
+      auth: user._id,
+      profile: user.profile,
+      challenge: challengePayload.challenge,
+    });
     return ResponseUtil.successResponse(
       res,
       STATUS_CODES.SUCCESS,
