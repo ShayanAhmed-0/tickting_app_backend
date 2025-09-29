@@ -16,10 +16,13 @@ class AuthenticationHelper {
   async sendOTP(
     email: string,
     userId: object,
-    type: OtpTypes
+    type: OtpTypes,
+    otp?: number
   ) {
     try {
-      const otp = randomInt(100000, 999999);
+      if(!otp){
+        otp = randomInt(100000, 999999);
+      }
       await OtpModel.deleteMany({
         userId: userId,
       });

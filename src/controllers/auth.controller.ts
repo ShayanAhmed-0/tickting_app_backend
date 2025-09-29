@@ -20,6 +20,7 @@ import { rpID, rpName, SALT_ROUNDS, UPLOADS_URL } from "../config/environment";
 import { OtpTypes, UserRole } from "../models";
 import DeviceModel from "../models/device.model";
 import { generateRegistrationOptions } from "@simplewebauthn/server";
+import { randomInt } from "crypto";
 
 export const signup = async (req: Request, res: Response) => {
   try {
@@ -50,10 +51,12 @@ export const signup = async (req: Request, res: Response) => {
       salt,
     });
 
+    const otp = randomInt(100000, 999999);
     helper.AuthenticationHelper.sendOTP(
       email,
       user._id,
-      OtpTypes.registaration
+      OtpTypes.registaration,
+      otp
     );
 
     const checkDevice = await DeviceModel.findOne({ deviceToken });
@@ -85,7 +88,7 @@ export const signup = async (req: Request, res: Response) => {
     return ResponseUtil.successResponse(
       res,
       STATUS_CODES.SUCCESS,
-      { user: userObj },
+      { user: userObj, otp },
       AUTH_CONSTANTS.OTP_SENT
     );
   } catch (err) {
@@ -144,10 +147,12 @@ export const login = async (req: Request, res: Response) => {
       });
     }
     if (!user.isVerified) {
+      const otp = randomInt(100000, 999999);
       helper.AuthenticationHelper.sendOTP(
         email,
         user._id,
-        OtpTypes.registaration
+        OtpTypes.registaration,
+        otp
       );
       return ResponseUtil.successResponse(
         res,
@@ -156,6 +161,7 @@ export const login = async (req: Request, res: Response) => {
           isVerified: user.isVerified,
           isProfileCompleted: user.isProfileCompleted,
           user: { _id: user._id, role: user.role },
+          otp,
         },
         AUTH_CONSTANTS.VERIFY_ACCOUNT
       );
@@ -245,11 +251,12 @@ export const sendOtp = async (req: Request, res: Response) => {
         AUTH_CONSTANTS.USER_NOT_FOUND
       );
     }
-    helper.AuthenticationHelper.sendOTP(email, user._id, OtpTypes.resend);
+    const otp = randomInt(100000, 999999);
+    helper.AuthenticationHelper.sendOTP(email, user._id, OtpTypes.resend, otp);
     return ResponseUtil.successResponse(
       res,
       STATUS_CODES.SUCCESS,
-      { email, userId: user._id },
+      { email, userId: user._id, otp },
       AUTH_CONSTANTS.OTP_SENT
     );
   } catch (err) {
