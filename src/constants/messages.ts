@@ -19,6 +19,7 @@ export const AUTH_CONSTANTS = {
   SAME_PASSWORD: "Current password and new password cannot be the same",
   PASSWORD_CHANGED: "Password changed successfully",
   PROFILE_FETCHED: "Profile fetched successfully",
+  CHALLENGE_CREATED: "Challenge created successfully",
 };
 
 export const MISC_CONSTANTS = {

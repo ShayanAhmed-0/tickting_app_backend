@@ -16,9 +16,10 @@ import MediaModel from "../models/media.model";
 import ProfileModel from "../models/profile.model";
 import mongoose from "mongoose";
 import { get_full_user_profile_population_from_auth_query } from "../queries/user.queries";
-import { SALT_ROUNDS, UPLOADS_URL } from "../config/environment";
+import { rpID, rpName, SALT_ROUNDS, UPLOADS_URL } from "../config/environment";
 import { OtpTypes, UserRole } from "../models";
 import DeviceModel from "../models/device.model";
+import { generateRegistrationOptions } from "@simplewebauthn/server";
 
 export const signup = async (req: Request, res: Response) => {
   try {
@@ -55,12 +56,26 @@ export const signup = async (req: Request, res: Response) => {
       OtpTypes.registaration
     );
 
-    await DeviceModel.create({
-      auth: user._id,
-      deviceToken,
-      deviceName: req.headers["user-agent"] || "unknown",
-      deviceType,
-    });
+    const checkDevice = await DeviceModel.findOne({ deviceToken });
+    if (checkDevice) {
+      await DeviceModel.findByIdAndUpdate(checkDevice._id, {
+        auth: user._id,
+        isActive: true,
+      });
+    } else {
+      await DeviceModel.create({
+        auth: user._id,
+        deviceToken,
+        deviceName: req.headers["user-agent"] || "unknown",
+        deviceType,
+      });
+    }
+    // await DeviceModel.create({
+    //   auth: user._id,
+    //   deviceToken,
+    //   deviceName: req.headers["user-agent"] || "unknown",
+    //   deviceType,
+    // });
 
     // Convert to plain object and remove sensitive fields
     const userObj = user.toObject();
@@ -342,6 +357,47 @@ export const getProfile = async (req: CustomRequest, res: Response) => {
       STATUS_CODES.SUCCESS,
       { user },
       AUTH_CONSTANTS.PROFILE_CREATED
+    );
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const createChallange = async (req: CustomRequest, res: Response) => {
+  try {
+    const { authId } = req;
+    const user = await AuthModel.findById(authId);
+    if (!user) {
+      throw new CustomError(
+        STATUS_CODES.NOT_FOUND,
+        AUTH_CONSTANTS.USER_NOT_FOUND
+      );
+    }
+    const challengePayload = await generateRegistrationOptions({
+      rpID: rpID!,
+      rpName: rpName!,
+      userName: user?.email || "",
+      // userDisplayName: user?.firstName || "",
+      // userId: user?._id.toString() || "",
+      // attestationType: "direct",
+      // authenticatorSelection: {
+      //   userVerification: "required",
+      // },
+      // pubKeyCredParams: [
+      //   {
+      //     type: "public-key",
+      //     alg: -7,
+      //   },
+      // ],
+    })
+    
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { challengePayload },
+      AUTH_CONSTANTS.CHALLENGE_CREATED
     );
   } catch (err) {
     if (err instanceof CustomError)

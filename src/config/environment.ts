@@ -18,5 +18,7 @@ export const {
   MAIL_HOST,
   MAIL_PASSWORD,
   UPLOADS_URL,
-  OTP_EXPIRY_SECONDS
+  OTP_EXPIRY_SECONDS,
+  rpID,
+  rpName
 } = process.env;

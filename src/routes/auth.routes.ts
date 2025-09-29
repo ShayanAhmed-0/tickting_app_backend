@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createProfile, getProfile, login, sendOtp, signup, verifyOtp } from "../controllers/auth.controller";
+import { createChallange, createProfile, getProfile, login, sendOtp, signup, verifyOtp } from "../controllers/auth.controller";
 import { handleMediaFilesLocal } from "../utils/Mutlipart";
 import { checkDefaultToken } from "../middleware/check-default-token.middleware";
 import { checkUserAuth } from "../middleware/check-user-auth.middleware";
@@ -40,6 +40,7 @@ router.post("/login", checkDefaultToken, validateBody(loginSchema), login);
 router.get("/profile", checkUserAuth, getProfile);
 router.post("/send-otp", checkDefaultToken, validateBody(emailSchema), sendOtp);
 router.post("/verify-otp", checkDefaultToken, validateBody(otpVerifySchema), verifyOtp);
+router.post("/create-challange", checkUserAuth, createChallange);
 // router.post("/forget", checkDefaultToken, validateBody(emailSchema), forgetAccount);
 // router.post("/forget-password", checkUserAuth, validateBody(passowrdSchema), forgetPassword);
 // router.post("/change-password", checkUserAuth, validateBody(changePassowrdSchema), changePassword);
