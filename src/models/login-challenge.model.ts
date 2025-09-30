@@ -1,16 +1,18 @@
 import mongoose, { Schema, model, Document } from "mongoose";
-import { ObjectId, UserRole } from "./common/types";
+import { ObjectId } from "./common/types";
 import { IProfile } from "./profile.model";
 import { IAuth } from "./auth.model";
 
-export interface IChallenge extends Document {
+export interface ILoginChallenge extends Document {
   auth: ObjectId | IAuth;
   profile: ObjectId | IProfile;
-  challenge: string;
+  loginChallenge: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 
-const ChallengeSchema = new Schema(
+const LoginChallengeSchema = new Schema(
   {
     auth: {
       type: Schema.Types.ObjectId,
@@ -21,7 +23,7 @@ const ChallengeSchema = new Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Profile",
     },
-    challenge: {
+    loginChallenge: {
       type: Schema.Types.String,
     },
   },
@@ -30,6 +32,6 @@ const ChallengeSchema = new Schema(
   }
 );
 
-const ChallengeModel = model("Challenge", ChallengeSchema);
+const LoginChallengeModel = model("LoginChallenge", LoginChallengeSchema);
 
-export default ChallengeModel;
+export default LoginChallengeModel;

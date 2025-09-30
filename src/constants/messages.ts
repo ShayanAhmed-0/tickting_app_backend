@@ -20,6 +20,12 @@ export const AUTH_CONSTANTS = {
   PASSWORD_CHANGED: "Password changed successfully",
   PROFILE_FETCHED: "Profile fetched successfully",
   CHALLENGE_CREATED: "Challenge created successfully",
+  CHALLENGE_VERIFIED: "Challenge verified successfully",
+  CHALLENGE_NOT_FOUND: "Challenge not found",
+  CHALLENGE_VERIFICATION_FAILED: "Challenge verification failed",
+  BIO_METRIC_NOT_ENABLED: "Bio metric not enabled",
+  BIO_METRIC_VERIFIED: "Bio metric verified successfully",
+  BIO_METRIC_VERIFICATION_FAILED: "Bio metric verification failed",
 };
 
 export const MISC_CONSTANTS = {

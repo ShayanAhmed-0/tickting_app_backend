@@ -9,6 +9,8 @@ export interface IDevice extends Document {
   deviceToken: string;
   deviceName: string;
   isActive: boolean;
+  lastAuthMethod?: 'password' | 'biometric' | 'otp';
+  lastLoginAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,7 +30,13 @@ const DeviceSchema = new Schema<IDevice>({
     index: true 
   },
   deviceName: { type: String, required: true },
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  lastAuthMethod: { 
+    type: String, 
+    enum: ['password', 'biometric', 'otp'],
+    default: null 
+  },
+  lastLoginAt: { type: Date, default: null }
 }, commonOptions);
 
 // Indexes

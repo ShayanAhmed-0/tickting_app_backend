@@ -10,6 +10,7 @@ export interface IAuth extends Document {
   profile: ObjectId | IProfile;
   isVerified: boolean
   isProfileCompleted: boolean
+  bioMetricEnabled?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +34,10 @@ const AuthSchema = new Schema(
       default: false,
     },
     isProfileCompleted: {
+      type: Schema.Types.Boolean,
+      default: false,
+    },
+    bioMetricEnabled: {
       type: Schema.Types.Boolean,
       default: false,
     },

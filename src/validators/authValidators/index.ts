@@ -108,3 +108,70 @@ export const createProfileSchema: ZodSchema<{
   state: z.string(),
   postalCode: z.string(),
 });
+
+// Biometric Authentication Validators
+export const verifyChallengeSchema: ZodSchema<{
+  options: {
+    id: string;
+    rawId: string;
+    response: {
+      attestationObject: string;
+      clientDataJSON: string;
+    };
+    type: string;
+  };
+  passkeyName?: string;
+  deviceType?: string;
+}> = z.object({
+  options: z.object({
+    id: z.string().min(1, "Credential ID is required"),
+    rawId: z.string().min(1, "Raw ID is required"),
+    response: z.object({
+      attestationObject: z.string().min(1, "Attestation object is required"),
+      clientDataJSON: z.string().min(1, "Client data JSON is required"),
+    }),
+    type: z.string().min(1, "Type is required"),
+  }),
+  passkeyName: z.string().max(100, "Passkey name too long").optional(),
+  deviceType: z.string().max(50, "Device type too long").optional(),
+});
+
+export const verifyLoginChallengeSchema: ZodSchema<{
+  options: {
+    id: string;
+    rawId: string;
+    response: {
+      authenticatorData: string;
+      clientDataJSON: string;
+      signature: string;
+      userHandle?: string;
+    };
+    type: string;
+  };
+  deviceToken?: string;
+  deviceType?: string;
+}> = z.object({
+  options: z.object({
+    id: z.string().min(1, "Credential ID is required"),
+    rawId: z.string().min(1, "Raw ID is required"),
+    response: z.object({
+      authenticatorData: z.string().min(1, "Authenticator data is required"),
+      clientDataJSON: z.string().min(1, "Client data JSON is required"),
+      signature: z.string().min(1, "Signature is required"),
+      userHandle: z.string().optional(),
+    }),
+    type: z.string().min(1, "Type is required"),
+  }),
+  deviceToken: z.string().optional(),
+  deviceType: z.string().max(50, "Device type too long").optional(),
+});
+
+export const updatePasskeyNameSchema: ZodSchema<{
+  name: string;
+}> = z.object({
+  name: z
+    .string()
+    .min(1, "Passkey name is required")
+    .max(100, "Passkey name too long")
+    .regex(/^[a-zA-Z0-9\s\-_]+$/, "Passkey name contains invalid characters"),
+});

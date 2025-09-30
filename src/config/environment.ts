@@ -20,5 +20,6 @@ export const {
   UPLOADS_URL,
   OTP_EXPIRY_SECONDS,
   rpID,
-  rpName
+  rpName,
+  rpOrigin
 } = process.env;
