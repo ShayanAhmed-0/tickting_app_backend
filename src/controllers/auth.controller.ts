@@ -349,6 +349,42 @@ export const createProfile = async (req: CustomRequest, res: Response) => {
   }
 };
 
+export const changePassword = async (req: CustomRequest, res: Response) => {
+  try {
+    const { authId } = req;
+    const { newPassword, oldPassword } = req.body;
+    const user = await AuthModel.findById(authId);
+    if (!user) {
+      throw new CustomError(
+        STATUS_CODES.NOT_FOUND,
+        AUTH_CONSTANTS.USER_NOT_FOUND
+      );
+    }
+    const hashPassword = await bcrypt.compareSync(oldPassword, user.password!);
+    if (!hashPassword) {
+      throw new CustomError(
+        STATUS_CODES.BAD_REQUEST,
+        AUTH_CONSTANTS.INVALID_CURRENT_PASSWORD
+      );
+    }
+    const salt = await bcrypt.genSalt(Number(SALT_ROUNDS));
+    const newHashPassword = await bcrypt.hash(newPassword, salt);
+    await AuthModel.findByIdAndUpdate(authId, {
+      password: newHashPassword,
+    });
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { message: AUTH_CONSTANTS.PASSWORD_CHANGED },
+      AUTH_CONSTANTS.PASSWORD_CHANGED
+    );
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
 export const getProfile = async (req: CustomRequest, res: Response) => {
   try {
     const authId = req.authId;

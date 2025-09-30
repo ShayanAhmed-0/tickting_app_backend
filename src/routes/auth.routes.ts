@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createChallange, createProfile, getProfile, login, loginChallenge, sendOtp, signup, verifyChallenge, verifyLoginChallenge, verifyOtp, getPasskeys, deletePasskey, updatePasskeyName } from "../controllers/auth.controller";
+import { createChallange, createProfile, getProfile, login, loginChallenge, sendOtp, signup, verifyChallenge, verifyLoginChallenge, verifyOtp, getPasskeys, deletePasskey, updatePasskeyName, changePassword } from "../controllers/auth.controller";
 import { handleMediaFilesLocal } from "../utils/Mutlipart";
 import { checkDefaultToken } from "../middleware/check-default-token.middleware";
 import { checkUserAuth } from "../middleware/check-user-auth.middleware";
@@ -47,7 +47,7 @@ router.post("/create-challange", checkUserAuth, createChallange);
 router.post("/verify-challange", checkUserAuth, validateBody(verifyChallengeSchema), verifyChallenge);
 router.post("/login-challange", checkUserAuth, loginChallenge);
 router.post("/verify-login-challange", checkUserAuth, validateBody(verifyLoginChallengeSchema), verifyLoginChallenge);
-
+router.post("/change-password", checkUserAuth, validateBody(changePassowrdSchema), changePassword);
 // Passkey Management Routes
 router.get("/passkeys", checkUserAuth, getPasskeys);
 router.delete("/passkeys/:passkeyId", checkUserAuth, deletePasskey);
