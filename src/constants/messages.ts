@@ -26,6 +26,8 @@ export const AUTH_CONSTANTS = {
   BIO_METRIC_NOT_ENABLED: "Bio metric not enabled",
   BIO_METRIC_VERIFIED: "Bio metric verified successfully",
   BIO_METRIC_VERIFICATION_FAILED: "Bio metric verification failed",
+  DRIVER_LICENSE_ID_ALREADY_EXISTS: "Driver license id already exists",
+  PROFILE_UPDATED: "Profile updated successfully",
 };
 
 export const MISC_CONSTANTS = {
@@ -35,4 +37,8 @@ export const MISC_CONSTANTS = {
 export const WEB_CONSTANTS = {
   CONTACT_FORM: "Contact Form",
   CONTACT_ADDED_SUCCESSFULLY: "Contact Added Successfully"
+}
+
+export const ADMIN_CONSTANTS = {
+  DRIVER_CREATED: "Driver created successfully"
 }

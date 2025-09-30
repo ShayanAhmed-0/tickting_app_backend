@@ -23,7 +23,6 @@ const PasskeySchema = new Schema(
     credentialId: {
       type: Schema.Types.String,
       required: true,
-      unique: true,
     },
     credential: {
       type: Schema.Types.Mixed,

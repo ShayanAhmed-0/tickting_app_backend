@@ -1,23 +1,18 @@
-import AuthConfig from "../config/authConfig";
 import bcrypt from "bcrypt";
 import { Request, Response } from "express";
-import { CustomRequest } from "../interfaces/auth";
+import { CustomRequest, IAuthWithProfile } from "../interfaces/auth";
 import { CustomError } from "../classes/CustomError";
 import ResponseUtil from "../utils/Response/responseUtils";
-import { hash } from "bcrypt";
-import { compareSync } from "bcrypt";
 import { generateToken } from "../utils/Token";
 import { OtpModel } from "../models/otp.model";
 import { AUTH_CONSTANTS } from "../constants/messages";
 import { STATUS_CODES } from "../constants/statusCodes";
-import AuthModel from "../models/auth.model";
+import AuthModel, { IAuth } from "../models/auth.model";
 import helper from "../helper";
-import MediaModel from "../models/media.model";
 import ProfileModel from "../models/profile.model";
 import mongoose from "mongoose";
-import { get_full_user_profile_population_from_auth_query } from "../queries/user.queries";
-import { rpID, rpName, rpOrigin, SALT_ROUNDS, UPLOADS_URL } from "../config/environment";
-import { OtpTypes, UserRole } from "../models";
+import { rpID, rpName, rpOrigin, SALT_ROUNDS } from "../config/environment";
+import { OtpTypes, UserRole, IProfile } from "../models";
 import DeviceModel from "../models/device.model";
 import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from "@simplewebauthn/server";
 import { randomInt } from "crypto";
@@ -348,6 +343,94 @@ export const createProfile = async (req: CustomRequest, res: Response) => {
     ResponseUtil.handleError(res, err);
   }
 };
+export const updateProfile = async (req: CustomRequest, res: Response) => {
+  try {
+    let {
+      firstName,
+      lastName,
+      dateOfBirth,
+      gender,
+      emergencyContact,
+      documentCode,
+      documentNumber,
+      documentIssuingCountry,
+      address,
+      city,
+      state,
+      postalCode,
+      driverLicenseId,
+      phoneNumber,
+      isActive,
+      isDeleted
+    } = req.body;
+    const authId = req.authId;
+    const user = await AuthModel.findById(authId).populate<{ profile: IProfile }>("profile");
+    if (!user) {
+      throw new CustomError(
+        STATUS_CODES.NOT_FOUND,
+        AUTH_CONSTANTS.USER_NOT_FOUND
+      );
+    }
+
+    // Handle uploaded avatar file
+    let pictureUrl = user.profile?.pictureUrl;
+    if (req.file) {
+      pictureUrl = `${process.env.UPLOADS_URL}/${req.file.filename}`;
+    }
+
+    const profiledoc = {
+      firstName:firstName || user.profile?.firstName,
+      lastName:lastName || user.profile?.lastName,
+      dob: dateOfBirth || user.profile?.dob,
+      gender:gender || user.profile?.gender,
+      phoneNumber:phoneNumber || user.profile?.phoneNumber,
+      pictureUrl,
+      address: {
+        streetAddress: address || user.profile?.address?.streetAddress,
+        city:city || user.profile?.address?.city,
+        state:state || user.profile?.address?.state,
+        postalCode:postalCode || user.profile?.address?.postalCode,
+      },
+      emergencyContact:emergencyContact || user.profile?.emergencyContact,
+      documents: {
+        documentCode:documentCode || user.profile?.documents?.documentCode,
+        documentNumber:documentNumber || user.profile?.documents?.documentNumber,
+        documentIssuingCountry:documentIssuingCountry || user.profile?.documents?.documentIssuingCountry,
+        driverLicenseId:driverLicenseId || user.profile?.documents?.driverLicenseId,
+      },
+    };
+    if(isActive !== undefined){
+      isActive = isActive === 'true' ? true : false;
+      await AuthModel.findByIdAndUpdate(authId, {
+        isActive: isActive,
+      });
+    }
+    if(isDeleted !== undefined){
+      isDeleted = isDeleted === 'true' ? true : false;
+      await AuthModel.findByIdAndUpdate(authId, {
+        isActive: isDeleted ? false : user.isActive,
+        email: isDeleted ? `${user.email}_deleted_${new Date().getTime()}` : user.email,
+        deletedAt: isDeleted ? new Date() : null,
+      });
+    }
+
+    const profile = await ProfileModel.findByIdAndUpdate(user.profile?._id, profiledoc, { new: true });
+    const userWithProfile = await AuthModel.findById(authId)
+      .populate("profile")
+      .select("-password");
+
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { user: userWithProfile },
+      AUTH_CONSTANTS.PROFILE_UPDATED
+    );
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
 
 export const changePassword = async (req: CustomRequest, res: Response) => {
   try {
@@ -390,7 +473,7 @@ export const getProfile = async (req: CustomRequest, res: Response) => {
     const authId = req.authId;
     const user = await AuthModel.findById(authId)
       .populate("profile")
-      .select("-password -salt");
+      .select("-password");
 
     if (!user) {
       throw new CustomError(
@@ -403,7 +486,7 @@ export const getProfile = async (req: CustomRequest, res: Response) => {
       res,
       STATUS_CODES.SUCCESS,
       { user },
-      AUTH_CONSTANTS.PROFILE_CREATED
+      AUTH_CONSTANTS.PROFILE_FETCHED
     );
   } catch (err) {
     if (err instanceof CustomError)

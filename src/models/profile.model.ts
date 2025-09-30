@@ -15,11 +15,13 @@ import { IAuth } from "./auth.model";
 export interface IProfile extends Document {
   auth: ObjectId | IAuth;
   firstName: string;
+  secondName: string;
   lastName: string;
   dob?: Date;
   gender: Gender;
   pictureUrl?: string;
   address?: Address;
+  phoneNumber?: string;
   emergencyContact?: string;
   preferredLanguage: Language;
   documents: Documents;
@@ -38,7 +40,8 @@ const ProfileSchema = new Schema<IProfile>(
       unique: true,
     },
     firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
+    secondName: { type: String },
+    lastName: { type: String },
     dob: { type: Date },
     gender: {
       type: String,
@@ -56,7 +59,9 @@ const ProfileSchema = new Schema<IProfile>(
       documentCode: { type: String, default: null },
       documentNumber: { type: String, default: null },
       documentIssuingCountry: { type: String, default: null },
+      driverLicenseId: { type: String, default: null },
     },
+    phoneNumber: { type: String, default: null },
     emergencyContact: { type: String, default: null },
     preferredLanguage: {
       type: String,

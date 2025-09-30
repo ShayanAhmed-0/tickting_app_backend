@@ -13,6 +13,7 @@ import adminMiscRoutes from "./routes/admin/misc.routes";
 import miscRoutes from "./routes/misc.routes";
 import webRoutes from "./routes/web/general.routes";
 import crypto from "crypto";
+import adminDriverRoutes from "./routes/admin/driver.routes";
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/misc`, miscRoutes);
 // admin routes
 app.use(`${API_PREFIX}/admin`, adminMiscRoutes);
+app.use(`${API_PREFIX}/admin/driver`, adminDriverRoutes);
 // web routes
 app.use(`/api`, webRoutes);
 

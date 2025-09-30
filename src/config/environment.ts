@@ -21,5 +21,6 @@ export const {
   OTP_EXPIRY_SECONDS,
   rpID,
   rpName,
-  rpOrigin
+  rpOrigin,
+  ENVIRONMENT
 } = process.env;

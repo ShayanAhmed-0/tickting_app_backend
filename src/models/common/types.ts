@@ -147,6 +147,7 @@ export interface Documents {
   documentCode: string;
   documentNumber: string;
   documentIssuingCountry: string;
+  driverLicenseId: string;
 }
 
 export interface EmergencyContact {

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createChallange, createProfile, getProfile, login, loginChallenge, sendOtp, signup, verifyChallenge, verifyLoginChallenge, verifyOtp, getPasskeys, deletePasskey, updatePasskeyName, changePassword } from "../controllers/auth.controller";
+import { createChallange, createProfile, getProfile, login, loginChallenge, sendOtp, signup, verifyChallenge, verifyLoginChallenge, verifyOtp, getPasskeys, deletePasskey, updatePasskeyName, changePassword, updateProfile } from "../controllers/auth.controller";
 import { handleMediaFilesLocal } from "../utils/Mutlipart";
 import { checkDefaultToken } from "../middleware/check-default-token.middleware";
 import { checkUserAuth } from "../middleware/check-user-auth.middleware";
@@ -34,15 +34,16 @@ router.post(
   // ]),
   createProfile
 );
-// router.post(
-//   "/create-profile",
-//   handleMediaFilesLocal.single("avatar"),
-//   createProfile
-// ); 
+router.post(
+  "/update-profile",
+  checkUserAuth,
+  handleMediaFilesLocal.single("avatar"),
+  updateProfile
+); 
 router.post("/login", checkDefaultToken, validateBody(loginSchema), login);
-router.get("/profile", checkUserAuth, getProfile);
 router.post("/send-otp", checkDefaultToken, validateBody(emailSchema), sendOtp);
 router.post("/verify-otp", checkDefaultToken, validateBody(otpVerifySchema), verifyOtp);
+router.get("/profile", checkUserAuth, getProfile);
 router.post("/create-challange", checkUserAuth, createChallange);
 router.post("/verify-challange", checkUserAuth, validateBody(verifyChallengeSchema), verifyChallenge);
 router.post("/login-challange", checkUserAuth, loginChallenge);
@@ -59,32 +60,3 @@ router.patch("/passkeys/:passkeyId", checkUserAuth, validateBody(updatePasskeyNa
 // router.post("/update-profile", checkUserAuth, getUserProfile);
 
 export default router;
-
-/**
- * @swagger
- * /api/v1/auth/login:
- *   post:
- *     summary: Login to the application
- *     tags: [Authentication Flow]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *               password:
- *                 type: string
- *     responses:
- *       200:
- *         description: Successful login
- *       400:
- *         description: Bad request
- *       500:
- *         description: Internal Server Error
- */

@@ -5,12 +5,13 @@ import { IProfile } from "./profile.model";
 export interface IAuth extends Document {
   email: string;
   password: string;
-  salt: string;
   role: UserRole;
   profile: ObjectId | IProfile;
   isVerified: boolean
   isProfileCompleted: boolean
   bioMetricEnabled?: boolean;
+  isActive: boolean;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +41,14 @@ const AuthSchema = new Schema(
     bioMetricEnabled: {
       type: Schema.Types.Boolean,
       default: false,
+    },
+    deletedAt: {
+      type: Schema.Types.Date,
+      default: null,
+    },
+    isActive: {
+      type: Schema.Types.Boolean,
+      default: true,
     },
   },
   {
