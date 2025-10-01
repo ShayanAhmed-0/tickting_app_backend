@@ -239,6 +239,35 @@ export const verifyOtp = async (req: Request, res: Response) => {
   }
 };
 
+export const resetPassword = async (req: CustomRequest, res: Response) => {
+  try {
+    const authId = req.authId;
+    const user = await AuthModel.findById(authId);
+    if (!user) {
+      throw new CustomError(
+        STATUS_CODES.NOT_FOUND,
+        AUTH_CONSTANTS.USER_NOT_FOUND
+      );
+    }
+    const { password } = req.body;
+    const salt = await bcrypt.genSalt(Number(SALT_ROUNDS));
+    const newHashPassword = await bcrypt.hash(password, salt);
+    await AuthModel.findByIdAndUpdate(authId, {
+      password: newHashPassword,
+    });
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { message: AUTH_CONSTANTS.PASSWORD_CHANGED },
+      AUTH_CONSTANTS.PASSWORD_CHANGED
+    );
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
 export const sendOtp = async (req: Request, res: Response) => {
   try {
     let { email } = req.body;
