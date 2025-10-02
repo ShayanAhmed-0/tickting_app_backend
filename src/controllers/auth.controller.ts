@@ -309,6 +309,7 @@ export const createProfile = async (req: CustomRequest, res: Response) => {
       city,
       state,
       postalCode,
+      phoneNumber,
     } = req.body;
     const authId = req.authId;
     const user = await AuthModel.findById(authId);
@@ -318,12 +319,18 @@ export const createProfile = async (req: CustomRequest, res: Response) => {
         AUTH_CONSTANTS.USER_NOT_FOUND
       );
     }
+    let pictureUrl = null;
+    if (req.file) {
+      pictureUrl = `${process.env.UPLOADS_URL}/${req.file.filename}`;
+    }
     const profiledoc = {
       auth: authId,
       firstName,
       lastName,
       dob: dateOfBirth,
       gender,
+      phoneNumber,
+      pictureUrl,
       address: {
         streetAddress: address,
         city,

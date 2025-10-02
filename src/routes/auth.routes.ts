@@ -24,6 +24,7 @@ router.post(
   "/create-profile",
   checkUserAuth,
   validateBody(createProfileSchema),
+  handleMediaFilesLocal.single("avatar"),
   // handleMediaFilesLocal.fields([ 
   //   { name: "avatar", maxCount: 1 }, 
   //   { name: "certificates", maxCount: 1 },
@@ -44,7 +45,7 @@ router.post("/login", checkDefaultToken, validateBody(loginSchema), login);
 router.post("/send-otp", checkDefaultToken, validateBody(emailSchema), sendOtp);
 router.post("/verify-otp", checkDefaultToken, validateBody(otpVerifySchema), verifyOtp);
 router.post("/reset-password", checkUserAuth, validateBody(passowrdSchema), resetPassword);
-router.get("/profile", checkUserAuth, getProfile);
+router.get("/profile", checkUserAuth, getProfile); 
 router.post("/create-challange", checkUserAuth, createChallange);
 router.post("/verify-challange", checkUserAuth, validateBody(verifyChallengeSchema), verifyChallenge);
 router.post("/login-challange", checkUserAuth, loginChallenge);

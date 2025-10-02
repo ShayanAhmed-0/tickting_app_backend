@@ -88,6 +88,7 @@ export const createProfileSchema: ZodSchema<{
   city: string;
   state: string;
   postalCode: string;
+  phoneNumber: string;
 }> = z.object({
   firstName: z.string().max(255),
   lastName: z.string().max(255),
@@ -107,6 +108,7 @@ export const createProfileSchema: ZodSchema<{
   city: z.string(),
   state: z.string(),
   postalCode: z.string(),
+  phoneNumber: z.string(),
 });
 
 // Biometric Authentication Validators
