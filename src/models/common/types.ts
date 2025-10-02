@@ -11,6 +11,16 @@ export enum UserRole {
   CUSTOMER = "customer",
 }
 
+export enum DepartureDay {
+  MONDAY = "monday",
+  TUESDAY = "tuesday",
+  WEDNESDAY = "wednesday",
+  THURSDAY = "thursday",
+  FRIDAY = "friday",
+  SATURDAY = "saturday",
+  SUNDAY = "sunday",
+}
+
 export enum OtpTypes {
   registaration = "registaration",
   resend = "resend",
@@ -134,6 +144,12 @@ export enum DeliveryStatus {
   DELIVERED = "delivered",
   FAILED = "failed",
   SEEN = "seen",
+}
+
+export enum GeoLocationType {
+  POINT = "Point",
+  LINE_STRING = "LineString",
+  POLYGON = "Polygon",
 }
 
 // Common interface types

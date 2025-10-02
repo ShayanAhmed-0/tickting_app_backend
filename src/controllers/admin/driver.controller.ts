@@ -8,6 +8,7 @@ import { SALT_ROUNDS } from "../../config/environment";
 import bcrypt from "bcrypt";
 import ProfileModel from "../../models/profile.model";
 import { UserRole } from "../../models";
+import helper from "../../helper";
 export const createDriver = async (req: Request, res: Response) => {
     try {
     let { firstName, secondName, lastName, email, password, driverLicenseId } = req.body;
@@ -36,3 +37,24 @@ export const createDriver = async (req: Request, res: Response) => {
       ResponseUtil.handleError(res, err);
     }
   };
+
+export const getDrivers = async (req: Request, res: Response) => {
+    try {
+      const { page, limit } = req.query;
+      const skip = (Number(page) - 1) * Number(limit);
+      const query = { role: UserRole.DRIVER, isActive: true , isDeleted: false, isProfileCompleted: true};
+      const options = {
+        page: Number(page),
+        limit: Number(limit),
+        sort: { createdAt: -1 } as Record<string, 1 | -1>,
+        select: "-password",
+        populate: [{ path: "profile", select: "firstName secondName lastName" }]
+      };
+      const drivers = await helper.PaginateHelper.customPaginate("drivers", AuthModel as any, query, options);
+        return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { drivers }, ADMIN_CONSTANTS.DRIVERS_FETCHED);
+    } catch (err) {
+        if (err instanceof CustomError)
+            return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+        ResponseUtil.handleError(res, err);
+    }
+}

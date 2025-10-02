@@ -1,5 +1,7 @@
 export const STATUS_CODES = {
   SUCCESS: 200,
+  CREATED: 201,
   BAD_REQUEST: 400,
+  CONFLICT: 409,
   NOT_FOUND: 404,
 };

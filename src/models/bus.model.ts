@@ -1,21 +1,27 @@
 import mongoose, { Schema, model, Document } from "mongoose";
 import { commonOptions } from "./common/options";
-import { ObjectId, SeatLayout, SeatLayoutType, SeatType } from "./common/types";
+import { DepartureDay, GeoLocation, GeoLocationType, ObjectId, SeatLayout, SeatLayoutType, SeatType } from "./common/types";
 
 // Interface definition
 export interface IBus extends Document {
-  registrationNumber: string;
+  description?: string;
+  serialNumber: string;
+  code: string;
   plateNumber?: string;
   make?: string;
   busModel?: string;
   year?: number;
   capacity: number;
+  currentLocation?: GeoLocation | undefined;
   seatLayout: SeatLayout;
   amenities: string[];
   lastMaintenanceAt?: Date;
   nextMaintenanceDue?: Date;
   isActive: boolean;
   office?: ObjectId;
+  driver?: ObjectId;
+  departureDay?: DepartureDay[];
+  departureTime?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,17 +29,28 @@ export interface IBus extends Document {
 // Schema definition
 const BusSchema = new Schema<IBus>(
   {
-    registrationNumber: {
+    code:{
+      type:String,
+      required:true,
+      index:true,
+      unique:true,
+    },
+    description: {type:String, default:null},
+    serialNumber: {
       type: String,
       required: true,
       index: true,
       unique: true,
     },
-    plateNumber: String,
-    make: String,
-    busModel: String,
-    year: Number,
-    capacity: { type: Number, required: true },
+    plateNumber: {type:String, default:null},
+    make: {type:String, default:null},
+    busModel: {type:String, default:null},
+    year: {type:Number, default:null},
+    capacity: { type: Number, default:null },
+    currentLocation: {
+      type: Schema.Types.Mixed,
+      default: undefined,
+    },
     seatLayout: {
       type: {
         type: String,
@@ -56,17 +73,22 @@ const BusSchema = new Schema<IBus>(
         },
       ],
     },
-    amenities: [String], // e.g. ['wifi','restroom','usb']
-    lastMaintenanceAt: Date,
-    nextMaintenanceDue: Date,
+    amenities: [{type:String, default:null}], // e.g. ['wifi','restroom','usb']
+    lastMaintenanceAt: {type:Date, default:null},
+    nextMaintenanceDue: {type:Date, default:null},
     isActive: { type: Boolean, default: true },
-    office: { type: Schema.Types.ObjectId, ref: "Office" }, // assigned home office or depot
+    office: { type: Schema.Types.ObjectId, ref: "Office", default:null }, // assigned home office or depot
+    driver: { type: Schema.Types.ObjectId, ref: "User", default:null }, // driver user id
+    departureDay: [{type:String, enum: DepartureDay, default:null}],
+    departureTime: {type:Date, default:null},
   },
   commonOptions
 );
 
 // Indexes
 // BusSchema.index({ registrationNumber: 1 }, { unique: true });
+// Note: 2dsphere index will be created manually for documents that have currentLocation
+
 
 // Model export
 const Bus = model<IBus>("Bus", BusSchema);

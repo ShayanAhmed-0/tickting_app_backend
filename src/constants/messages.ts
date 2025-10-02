@@ -40,5 +40,16 @@ export const WEB_CONSTANTS = {
 }
 
 export const ADMIN_CONSTANTS = {
-  DRIVER_CREATED: "Driver created successfully"
+  DRIVER_CREATED: "Driver created successfully",
+  DRIVERS_FETCHED: "Drivers fetched successfully",
+  BUS_CREATED: "Bus created successfully",
+  BUS_UPDATED: "Bus updated successfully",
+  BUS_DELETED: "Bus deleted successfully",
+  BUS_FETCHED: "Bus fetched successfully",
+  BUS_NOT_FOUND: "Bus not found",
+  BUS_ALREADY_EXISTS: "Bus already exists",
+  BUS_NOT_ACTIVE: "Bus is not active",
+  BUS_NOT_IN_ACTIVE_TIME: "Bus is not in active time",
+  BUS_NOT_IN_ACTIVE_DAY: "Bus is not in active day",
+
 }
