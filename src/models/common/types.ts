@@ -11,7 +11,7 @@ export enum UserRole {
   CUSTOMER = "customer",
 }
 
-export enum DepartureDay {
+export enum DaysEnums {
   MONDAY = "monday",
   TUESDAY = "tuesday",
   WEDNESDAY = "wednesday",

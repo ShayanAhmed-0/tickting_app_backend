@@ -1,6 +1,6 @@
 import mongoose, { Schema, model, Document } from "mongoose";
 import { commonOptions } from "./common/options";
-import { DepartureDay, GeoLocation, GeoLocationType, ObjectId, SeatLayout, SeatLayoutType, SeatType } from "./common/types";
+import { DaysEnums, GeoLocation, GeoLocationType, ObjectId, SeatLayout, SeatLayoutType, SeatType } from "./common/types";
 
 // Interface definition
 export interface IBus extends Document {
@@ -20,7 +20,7 @@ export interface IBus extends Document {
   isActive: boolean;
   office?: ObjectId;
   driver?: ObjectId;
-  departureDay?: DepartureDay[];
+  departureDay?: DaysEnums[];
   departureTime?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -79,7 +79,7 @@ const BusSchema = new Schema<IBus>(
     isActive: { type: Boolean, default: true },
     office: { type: Schema.Types.ObjectId, ref: "Office", default:null }, // assigned home office or depot
     driver: { type: Schema.Types.ObjectId, ref: "User", default:null }, // driver user id
-    departureDay: [{type:String, enum: DepartureDay, default:null}],
+    departureDay: [{type:String, enum: DaysEnums, default:null}],
     departureTime: {type:Date, default:null},
   },
   commonOptions

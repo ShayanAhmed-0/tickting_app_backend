@@ -40,6 +40,8 @@ export const WEB_CONSTANTS = {
 }
 
 export const ADMIN_CONSTANTS = {
+  OFFICE_CREATED: "Office created successfully",
+  OFFICE_FETCHED: "Office fetched successfully",
   DRIVER_CREATED: "Driver created successfully",
   DRIVERS_FETCHED: "Drivers fetched successfully",
   BUS_CREATED: "Bus created successfully",
@@ -51,5 +53,9 @@ export const ADMIN_CONSTANTS = {
   BUS_NOT_ACTIVE: "Bus is not active",
   BUS_NOT_IN_ACTIVE_TIME: "Bus is not in active time",
   BUS_NOT_IN_ACTIVE_DAY: "Bus is not in active day",
+  DESTINATION_CREATED: "Destination created successfully",
+  DESTINATIONS_FETCHED: "Destinations fetched successfully",
+  ROUTE_CREATED: "Route created successfully",
+  ROUTES_FETCHED: "Routes fetched successfully",
 
 }

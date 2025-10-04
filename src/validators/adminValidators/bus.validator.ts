@@ -1,5 +1,5 @@
 import { z, ZodSchema } from "zod";
-import { DepartureDay } from "../../models/common/types";
+import { DaysEnums } from "../../models/common/types";
 
 export const createBusSchema: ZodSchema<{
   code: string;
@@ -36,13 +36,13 @@ export const createBusSchema: ZodSchema<{
   
   departureDays: z.array(
     z.enum([
-      DepartureDay.MONDAY,
-      DepartureDay.TUESDAY,
-      DepartureDay.WEDNESDAY,
-      DepartureDay.THURSDAY,
-      DepartureDay.FRIDAY,
-      DepartureDay.SATURDAY,
-      DepartureDay.SUNDAY
+      DaysEnums.MONDAY,
+      DaysEnums.TUESDAY,
+      DaysEnums.WEDNESDAY,
+      DaysEnums.THURSDAY,
+      DaysEnums.FRIDAY,
+      DaysEnums.SATURDAY,
+      DaysEnums.SUNDAY
     ])
   ).optional()
 });
