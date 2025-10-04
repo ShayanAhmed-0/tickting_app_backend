@@ -76,8 +76,11 @@ export const createDestinations = async (req: Request, res: Response) => {
 
 export const getDestinations = async (req: Request, res: Response) => {
   try {
-    const { page, limit } = req.query;
-    const query = { isActive: true, isDeleted: false };
+    const { page, limit, name } = req.query;
+    const query: any = { isActive: true, isDeleted: false };
+    if (name && typeof name === "string" && name.trim() !== "") {
+      query.name = { $regex: name.trim(), $options: "i" };
+    }
     const options = {
       page: Number(page),
       limit: Number(limit),

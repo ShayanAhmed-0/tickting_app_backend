@@ -1,6 +1,6 @@
 import mongoose, { Schema, model, Document } from "mongoose";
 import { commonOptions } from "./common/options";
-import { DaysEnums, GeoLocation, GeoLocationType, ObjectId, SeatLayout, SeatLayoutType, SeatType } from "./common/types";
+import { DaysEnums, GeoLocation, GeoLocationType, ObjectId, SeatLayout, SeatLayoutType, SeatStatus, SeatType } from "./common/types";
 
 // Interface definition
 export interface IBus extends Document {
@@ -67,6 +67,11 @@ const BusSchema = new Schema<IBus>(
             enum: Object.values(SeatType),
             default: SeatType.REGULAR,
           },
+          status:{
+            type: String,
+            enum: SeatStatus,
+            default: SeatStatus.AVAILABLE,
+          },
           isAvailable: { type: Boolean, default: true },
           // you can store geometry for mapping seat positions in UI
           meta: Schema.Types.Mixed,
@@ -91,5 +96,5 @@ const BusSchema = new Schema<IBus>(
 
 
 // Model export
-const Bus = model<IBus>("Bus", BusSchema);
-export default Bus;
+const BusModel = model<IBus>("Bus", BusSchema);
+export default BusModel;

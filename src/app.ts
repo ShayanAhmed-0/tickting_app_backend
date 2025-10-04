@@ -18,6 +18,9 @@ import adminBusRoutes from "./routes/admin/bus.routes";
 import adminSalesOfficeRoutes from "./routes/admin/sales-office.routes";
 import adminDestinationRoutes from "./routes/admin/destinations.routes";
 import adminRoutesRoutes from "./routes/admin/routes.routes";
+import bookingRoutes from "./routes/booking.routes";
+import destinationRoutes from "./routes/destinations.routes";
+import routesRoutes from "./routes/routes.routes";
 
 dotenv.config();
 
@@ -46,6 +49,8 @@ morganBody(app, {
 
 // Routes
 app.use(`${API_PREFIX}/auth`, authRoutes);
+app.use(`${API_PREFIX}/destination`, destinationRoutes);
+app.use(`${API_PREFIX}/routes`, routesRoutes);
 // misc routes
 app.use(`${API_PREFIX}/misc`, miscRoutes);
 // admin routes
@@ -55,6 +60,8 @@ app.use(`${API_PREFIX}/admin/bus`, adminBusRoutes);
 app.use(`${API_PREFIX}/admin/sales-office`, adminSalesOfficeRoutes);
 app.use(`${API_PREFIX}/admin/destination`, adminDestinationRoutes);
 app.use(`${API_PREFIX}/admin/routes`, adminRoutesRoutes);
+// booking routes (real-time seat booking)
+app.use(`/api/booking`, bookingRoutes);
 // web routes
 app.use(`/api`, webRoutes);
 

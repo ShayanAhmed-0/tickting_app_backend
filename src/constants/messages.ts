@@ -57,5 +57,5 @@ export const ADMIN_CONSTANTS = {
   DESTINATIONS_FETCHED: "Destinations fetched successfully",
   ROUTE_CREATED: "Route created successfully",
   ROUTES_FETCHED: "Routes fetched successfully",
-
+  ROUTE_FETCHED: "Route fetched successfully",
 }

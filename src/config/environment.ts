@@ -22,5 +22,10 @@ export const {
   rpID,
   rpName,
   rpOrigin,
-  ENVIRONMENT
+  ENVIRONMENT,
+  REDIS_HOST,
+  REDIS_PORT,
+  CLIENT_URL,
+  SEAT_HOLD_DURATION,
+  REDIS_URL
 } = process.env;

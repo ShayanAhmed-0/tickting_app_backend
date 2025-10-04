@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Filtering API Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .query-display {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            border-left: 4px solid #007bff;
+        }
+        .response-display {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            border-left: 4px solid #28a745;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .examples {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        .example-btn {
+            display: inline-block;
+            background-color: #6c757d;
+            color: white;
+            padding: 5px 10px;
+            margin: 2px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .example-btn:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Route Filtering API Demo</h1>
+    
+    <div class="container">
+        <h2>🔍 Filter Routes</h2>
+        <form id="filterForm">
+            <div class="grid">
+                <div>
+                    <div class="form-group">
+                        <label for="origin">Origin ID:</label>
+                        <input type="text" id="origin" placeholder="e.g., 68e07ca39b1b15d265780592">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="destination">Destination ID:</label>
+                        <input type="text" id="destination" placeholder="e.g., 68e07ca39b1b15d265780593">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="departureDate">Departure Date:</label>
+                        <input type="date" id="departureDate">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="returnDate">Return Date:</label>
+                        <input type="date" id="returnDate">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tripType">Trip Type:</label>
+                        <select id="tripType">
+                            <option value="">Select trip type</option>
+                            <option value="one-way">One Way</option>
+                            <option value="round-trip">Round Trip</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="form-group">
+                        <label for="day">Day of Week:</label>
+                        <select id="day">
+                            <option value="">Select day</option>
+                            <option value="monday">Monday</option>
+                            <option value="tuesday">Tuesday</option>
+                            <option value="wednesday">Wednesday</option>
+                            <option value="thursday">Thursday</option>
+                            <option value="friday">Friday</option>
+                            <option value="saturday">Saturday</option>
+                            <option value="sunday">Sunday</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="time">Time Range:</label>
+                        <input type="text" id="time" placeholder="e.g., 08:00-18:00">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bus">Bus ID:</label>
+                        <input type="text" id="bus" placeholder="e.g., 68e07ca39b1b15d265780594">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="search">Search:</label>
+                        <input type="text" id="search" placeholder="e.g., Mexico">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="isActive">Status:</label>
+                        <select id="isActive">
+                            <option value="">All</option>
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid">
+                <div>
+                    <div class="form-group">
+                        <label for="sortBy">Sort By:</label>
+                        <select id="sortBy">
+                            <option value="">Default</option>
+                            <option value="createdAt">Date Created</option>
+                            <option value="name">Route Name</option>
+                            <option value="dayTime.time">Departure Time</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="form-group">
+                        <label for="sortOrder">Sort Order:</label>
+                        <select id="sortOrder">
+                            <option value="">Default</option>
+                            <option value="asc">Ascending</option>
+                            <option value="desc">Descending</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid">
+                <div>
+                    <div class="form-group">
+                        <label for="page">Page:</label>
+                        <input type="number" id="page" value="1" min="1">
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="form-group">
+                        <label for="limit">Limit:</label>
+                        <input type="number" id="limit" value="10" min="1" max="100">
+                    </div>
+                </div>
+            </div>
+            
+            <button type="submit">🔍 Search Routes</button>
+        </form>
+        
+        <div class="examples">
+            <h3>📋 Quick Examples:</h3>
+            <button class="example-btn" onclick="loadExample('basic')">Basic Listing</button>
+            <button class="example-btn" onclick="loadExample('origin-dest')">Origin & Destination</button>
+            <button class="example-btn" onclick="loadExample('date')">Date Filtering</button>
+            <button class="example-btn" onclick="loadExample('day-time')">Day & Time</button>
+            <button class="example-btn" onclick="loadExample('search')">Search</button>
+            <button class="example-btn" onclick="loadExample('complex')">Complex Filtering</button>
+            <button class="example-btn" onclick="loadExample('sorting')">Sorting</button>
+            <button class="example-btn" onclick="loadExample('pagination')">Pagination</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>📡 Generated Query</h2>
+        <div id="queryDisplay" class="query-display">Click "Search Routes" to generate query...</div>
+    </div>
+    
+    <div class="container">
+        <h2>📊 API Response</h2>
+        <div id="responseDisplay" class="response-display">Click "Search Routes" to see response...</div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:9000/api/admin/routes';
+        const AUTH_TOKEN = 'your-jwt-token-here'; // Replace with actual token
+        
+        // Example data
+        const examples = {
+            'basic': {
+                page: 1,
+                limit: 10
+            },
+            'origin-dest': {
+                origin: '68e07ca39b1b15d265780592',
+                destination: '68e07ca39b1b15d265780593',
+                page: 1,
+                limit: 10
+            },
+            'date': {
+                departureDate: '2024-01-15',
+                tripType: 'one-way',
+                page: 1,
+                limit: 10
+            },
+            'day-time': {
+                day: 'monday',
+                time: '08:00-18:00',
+                page: 1,
+                limit: 10
+            },
+            'search': {
+                search: 'Mexico',
+                page: 1,
+                limit: 10
+            },
+            'complex': {
+                origin: '68e07ca39b1b15d265780592',
+                destination: '68e07ca39b1b15d265780593',
+                departureDate: '2024-01-15',
+                tripType: 'one-way',
+                day: 'monday',
+                time: '08:00-18:00',
+                sortBy: 'dayTime.time',
+                sortOrder: 'asc',
+                page: 1,
+                limit: 10
+            },
+            'sorting': {
+                sortBy: 'name',
+                sortOrder: 'asc',
+                page: 1,
+                limit: 10
+            },
+            'pagination': {
+                page: 2,
+                limit: 5
+            }
+        };
+        
+        // Load example data
+        function loadExample(exampleName) {
+            const example = examples[exampleName];
+            if (!example) return;
+            
+            Object.keys(example).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    element.value = example[key];
+                }
+            });
+            
+            // Trigger form submission
+            document.getElementById('filterForm').dispatchEvent(new Event('submit'));
+        }
+        
+        // Generate query string
+        function generateQuery() {
+            const form = document.getElementById('filterForm');
+            const formData = new FormData(form);
+            const params = new URLSearchParams();
+            
+            for (const [key, value] of formData.entries()) {
+                if (value && value.trim() !== '') {
+                    params.append(key, value);
+                }
+            }
+            
+            return `${BASE_URL}?${params.toString()}`;
+        }
+        
+        // Make API request
+        async function makeRequest() {
+            const query = generateQuery();
+            document.getElementById('queryDisplay').textContent = query;
+            
+            try {
+                const response = await fetch(query, {
+                    headers: {
+                        'Authorization': `Bearer ${AUTH_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('responseDisplay').textContent = JSON.stringify(data, null, 2);
+                    document.getElementById('responseDisplay').className = 'response-display';
+                } else {
+                    document.getElementById('responseDisplay').textContent = `Error ${response.status}: ${data.message || 'Unknown error'}`;
+                    document.getElementById('responseDisplay').className = 'response-display error';
+                }
+            } catch (error) {
+                document.getElementById('responseDisplay').textContent = `Network Error: ${error.message}`;
+                document.getElementById('responseDisplay').className = 'response-display error';
+            }
+        }
+        
+        // Form submission
+        document.getElementById('filterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            makeRequest();
+        });
+        
+        // Initialize with basic example
+        loadExample('basic');
+    </script>
+</body>
+</html>
+

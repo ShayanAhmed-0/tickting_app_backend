@@ -4,7 +4,7 @@ import ResponseUtil from "../../utils/Response/responseUtils";
 import { ADMIN_CONSTANTS } from "../../constants/messages";
 import { CustomError } from "../../classes/CustomError";
 import Bus from "../../models/bus.model";
-import { SeatLayoutType, SeatType, Seat } from "../../models/common/types";
+import { SeatLayoutType, SeatType, Seat, SeatStatus } from "../../models/common/types";
 import helper from "../../helper";
 
 // Function to generate the 54-seat layout based on the provided image
@@ -83,6 +83,7 @@ const generateSeatLayout = () => {
       seatIndex: index + 1,
       type: SeatType.REGULAR,
       isAvailable: true,
+      status: SeatStatus.AVAILABLE,
       meta: {
         seatNumber: seat.seatNumber,
         row: seat.row,

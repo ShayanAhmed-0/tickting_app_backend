@@ -152,6 +152,12 @@ export enum GeoLocationType {
   POLYGON = "Polygon",
 }
 
+export enum SeatStatus {
+  AVAILABLE = "available",
+  BOOKED = "booked",
+  HOLD = "hold",
+}
+
 // Common interface types
 export interface Address {
   streetAddress: string;
@@ -186,6 +192,7 @@ export interface Seat {
   seatLabel?: string;
   seatIndex?: number;
   type: SeatType;
+  status: SeatStatus;
   isAvailable: boolean;
   meta?: any;
 }
