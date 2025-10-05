@@ -224,7 +224,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
       return ResponseUtil.successResponse(
         res,
         STATUS_CODES.SUCCESS,
-        { token },
+        { token,role: user.role,userId:userId,email: user.email },
         AUTH_CONSTANTS.OTP_VERIFIED
       );
     }
