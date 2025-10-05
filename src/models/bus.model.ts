@@ -73,6 +73,7 @@ const BusSchema = new Schema<IBus>(
             default: SeatStatus.AVAILABLE,
           },
           isAvailable: { type: Boolean, default: true },
+          userId: { type: Schema.Types.ObjectId, ref: "User", default:null },
           // you can store geometry for mapping seat positions in UI
           meta: Schema.Types.Mixed,
         },

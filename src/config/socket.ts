@@ -40,7 +40,7 @@ export interface SeatHoldData {
 export interface SeatStatusChangeEvent {
   routeId: string;
   seatLabel: string;
-  status: 'available' | 'held' | 'booked';
+  status: 'available' | 'held' | 'booked' | 'selected';
   expiresAt?: number;
   userId?: string;
 }

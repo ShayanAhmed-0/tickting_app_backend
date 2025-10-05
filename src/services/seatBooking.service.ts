@@ -6,6 +6,7 @@ import { redis, RedisKeys } from '../config/redis';
 import { BookingStatus, PaymentStatus, SeatStatus } from '../models/common/types';
 import { SEAT_HOLD_DURATION } from '../config/environment';
 import BusModel from '../models/bus.model';
+import mongoose from 'mongoose';
 
 /**
  * Service for managing seat bookings with real-time holds using Route model
@@ -15,11 +16,11 @@ export class SeatBookingService {
   /**
    * Get seat availability for a route from Redis cache or database
    */
-  async getSeatAvailability(routeId: string): Promise<Record<string, string>> {
+  async getSeatAvailability(routeId: string, userId?: string): Promise<Record<string, string>> {
     try {
       // Always fetch fresh data from database to ensure we get all seats
       // and current hold status
-      const seats = await this.fetchSeatsFromDatabase(routeId);
+      const seats = await this.fetchSeatsFromDatabase(routeId, userId);
       
       // Update cache with fresh data
       const pipeline = redis.pipeline();
@@ -77,7 +78,7 @@ export class SeatBookingService {
       if (!seat) {
         return { success: false, reason: 'seat_not_found' };
       }
-      if(seat.status === SeatStatus.HOLD) {
+      if(seat.status === SeatStatus.HELD) {
         return { success: false, reason: 'seat_held by someone else' };
       }
       if(seat.status === SeatStatus.BOOKED) {
@@ -87,8 +88,10 @@ export class SeatBookingService {
         return { success: false, reason: 'seat_booked' };
       }
    
+      
       seat.isAvailable = false;
-      seat.status = SeatStatus.HOLD;
+      seat.status = SeatStatus.SELECTED; // Set as SELECTED for the current user
+      seat.userId = new mongoose.Types.ObjectId(userId);
       await bus.save();
       
       // Create hold data
@@ -107,7 +110,7 @@ export class SeatBookingService {
       await redis.expire(RedisKeys.userHolds(userId), Math.floor(this.SEAT_HOLD_DURATION / 1000));
       
       // Update seat status in cache
-      await redis.hset(RedisKeys.tripSeats(routeId), seatLabel, 'held');
+      await redis.hset(RedisKeys.tripSeats(routeId), seatLabel, 'selected');
       
       return { success: true, expiresAt: holdData.expiresAt };
       
@@ -148,6 +151,7 @@ export class SeatBookingService {
     if (!seat) {
       return { success: false, reason: 'seat_not_found' };
     }
+    seat.userId = null;
     seat.isAvailable = true;
     seat.status = SeatStatus.AVAILABLE;
     await bus.save();
@@ -230,7 +234,7 @@ export class SeatBookingService {
   /**
    * Fetch seat data from database based on route's bus
    */
-  private async fetchSeatsFromDatabase(routeId: string): Promise<Record<string, string>> {
+  private async fetchSeatsFromDatabase(routeId: string, userId?: string): Promise<Record<string, string>> {
     const route = await Route.findById(routeId).populate('bus');
     if (!route) {
       throw new Error('Route not found');
@@ -269,6 +273,7 @@ export class SeatBookingService {
     
     // Check Redis for held seats and update their status
     let heldCount = 0;
+    let selectedCount = 0;
     for (const seatLabel of Object.keys(seats)) {
       const holdKey = RedisKeys.seatHold(routeId, seatLabel);
       const holdData = await redis.get(holdKey);
@@ -277,12 +282,18 @@ export class SeatBookingService {
         const hold = JSON.parse(holdData);
         // Check if hold is still valid (not expired)
         if (Date.now() < hold.expiresAt) {
-          seats[seatLabel] = 'held';
-          heldCount++;
+          // Differentiate between seats held by current user vs others
+          if (userId && hold.userId === userId) {
+            seats[seatLabel] = 'selected';
+            selectedCount++;
+          } else {
+            seats[seatLabel] = 'held';
+            heldCount++;
+          }
         }
       }
     }
-    console.log(`🔒 Found ${heldCount} held seats for route ${routeId}`);
+    console.log(`🔒 Found ${heldCount} held seats and ${selectedCount} selected seats for route ${routeId}`);
     
     console.log(`✅ Returning ${Object.keys(seats).length} total seats for route ${routeId}:`, seats);
     return seats;

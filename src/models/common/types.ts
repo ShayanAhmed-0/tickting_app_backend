@@ -155,7 +155,8 @@ export enum GeoLocationType {
 export enum SeatStatus {
   AVAILABLE = "available",
   BOOKED = "booked",
-  HOLD = "hold",
+  SELECTED = "selected",
+  HELD = "held",
 }
 
 // Common interface types
@@ -194,6 +195,7 @@ export interface Seat {
   type: SeatType;
   status: SeatStatus;
   isAvailable: boolean;
+  userId?: ObjectId | null;
   meta?: any;
 }
 

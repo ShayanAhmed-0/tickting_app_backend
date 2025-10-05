@@ -217,7 +217,7 @@ export class SocketHandlers {
       console.log(`User ${socketData.userId} joined route ${routeId}`);
       
       // Send acknowledgment with seat availability
-      const seats = await seatBookingService.getSeatAvailability(routeId);
+      const seats = await seatBookingService.getSeatAvailability(routeId, socketData.userId);
       
       ack({
         success: true,
@@ -312,7 +312,8 @@ export class SocketHandlers {
         });
       }
       
-      const seats = await seatBookingService.getSeatAvailability(routeId);
+      const socketData = socket.data as SocketData;
+      const seats = await seatBookingService.getSeatAvailability(routeId, socketData.userId);
       
       ack({
         success: true,
@@ -374,7 +375,7 @@ export class SocketHandlers {
         const statusChangeEvent: SeatStatusChangeEvent = {
           routeId, // Keep field name for compatibility
           seatLabel,
-          status: 'held',
+          status: 'selected' as const,
           expiresAt: result.expiresAt,
           userId: socketData.userId
         };
@@ -388,11 +389,12 @@ export class SocketHandlers {
           if (released.success) {
             socketData.heldSeats.delete(`${routeId}:${seatLabel}`);
             
-            // Broadcast seat release
+            // Get updated seat status and broadcast
+            const updatedSeats = await seatBookingService.getSeatAvailability(routeId);
             this.io.to(`route:${routeId}`).emit('seat:status:changed', {
               tripId: routeId, // Keep field name for compatibility
               seatLabel,
-              status: 'available',
+              status: updatedSeats[seatLabel] || 'available',
               userId: socketData.userId
             });
             
@@ -452,11 +454,14 @@ export class SocketHandlers {
           }
         });
         
-        // Broadcast to all users
+        // Get updated seat status for all users in the room
+        const updatedSeats = await seatBookingService.getSeatAvailability(routeId);
+        
+        // Broadcast to all users with updated seat status
         this.io.to(`route:${routeId}`).emit('seat:status:changed', {
           tripId: routeId, // Keep field name for compatibility
           seatLabel,
-          status: 'available',
+          status: updatedSeats[seatLabel] || 'available',
           userId: socketData.userId
         });
         
