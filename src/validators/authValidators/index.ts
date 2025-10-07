@@ -177,3 +177,39 @@ export const updatePasskeyNameSchema: ZodSchema<{
     .max(100, "Passkey name too long")
     .regex(/^[a-zA-Z0-9\s\-_]+$/, "Passkey name contains invalid characters"),
 });
+
+export const updateProfileSchema: ZodSchema<{
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: Date;
+  gender?: Gender;
+  emergencyContact?: string;
+  documentCode?: string;
+  documentNumber?: string;
+  documentIssuingCountry?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  phoneNumber?: string;
+}> = z.object({
+    firstName: z.string().max(255).optional(),
+    lastName: z.string().max(255).optional(),
+    dateOfBirth: z.coerce.date({
+        errorMap: () => ({ message: "Invalid date format" }),
+    }).optional(),
+    gender: z.nativeEnum(Gender, {
+        errorMap: () => ({
+            message: "Invalid gender. Must be male, female, other, or prefer_not_say",
+        }),
+    }).optional(),
+    emergencyContact: z.string().optional(),
+    documentCode: z.string().optional(),
+    documentNumber: z.string().optional(),
+    documentIssuingCountry: z.string().optional(),
+    address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    postalCode: z.string().optional(),
+    phoneNumber: z.string().optional(),
+});
