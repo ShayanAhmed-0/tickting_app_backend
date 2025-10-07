@@ -14,7 +14,8 @@ import {
   createProfileSchema,
   verifyChallengeSchema,
   verifyLoginChallengeSchema,
-  updatePasskeyNameSchema
+  updatePasskeyNameSchema,
+  updateProfileSchema
 } from "../validators/authValidators";
 
 const router = Router();
@@ -23,8 +24,8 @@ router.post("/signup", checkDefaultToken, validateBody(signupSchema), signup);
 router.post(
   "/create-profile",
   checkUserAuth,
-  validateBody(createProfileSchema),
   handleMediaFilesLocal.single("avatar"),
+  validateBody(createProfileSchema),
   // handleMediaFilesLocal.fields([ 
   //   { name: "avatar", maxCount: 1 }, 
   //   { name: "certificates", maxCount: 1 },
@@ -39,6 +40,7 @@ router.post(
   "/update-profile",
   checkUserAuth,
   handleMediaFilesLocal.single("avatar"),
+  validateBody(updateProfileSchema),
   updateProfile
 ); 
 router.post("/login", checkDefaultToken, validateBody(loginSchema), login);
