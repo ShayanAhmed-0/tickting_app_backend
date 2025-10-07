@@ -1,17 +1,147 @@
 import { Server as SocketIOServer } from 'socket.io';
 import seatBookingService from '../services/seatBooking.service';
 import { SocketData, SeatStatusChangeEvent } from '../config/socket';
+import { redis, RedisKeys } from '../config/redis';
 
 /**
  * Socket.io event handlers for real-time seat booking using Route model
  */
 export class SocketHandlers {
   private io: SocketIOServer;
+  private cleanupInterval: NodeJS.Timeout | null = null;
   
   constructor(io: SocketIOServer) {
     this.io = io;
+    this.startPeriodicCleanup();
   }
   
+  /**
+   * Start periodic cleanup of expired holds
+   */
+  private startPeriodicCleanup(): void {
+    // Run cleanup every 10 seconds to catch expired seats more frequently
+    this.cleanupInterval = setInterval(async () => {
+      try {
+        await this.cleanupExpiredHolds();
+      } catch (error) {
+        console.error('Error during periodic cleanup:', error);
+      }
+    }, 10000); // 10 seconds
+  }
+
+  /**
+   * Stop periodic cleanup
+   */
+  public stopPeriodicCleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+
+  /**
+   * Clean up expired holds for a specific route
+   */
+  private async cleanupExpiredHoldsForRoute(routeId: string): Promise<void> {
+    try {
+      // Get all hold keys for this route
+      const holdKeys = await redis.keys(`hold:${routeId}:*`);
+      
+      for (const holdKey of holdKeys) {
+        const holdData = await redis.get(holdKey);
+        
+        if (holdData) {
+          const hold = JSON.parse(holdData);
+          
+          // Check if hold is expired
+          if (Date.now() > hold.expiresAt) {
+            // Extract seat label from hold key
+            const seatLabel = holdKey.split(':')[2];
+            
+            // Emit seat expired event
+            this.io.to(`route:${routeId}`).emit('seat:expired', {
+              seatLabel,
+              routeId,
+              userId: hold.userId,
+              expiredAt: new Date().toISOString()
+            });
+            
+            // Emit seat status change to available
+            this.io.to(`route:${routeId}`).emit('seat:status:changed', {
+              routeId,
+              seatLabel,
+              status: 'available',
+              userId: hold.userId
+            });
+            
+            console.log(`🕒 Seat ${seatLabel} expired for user ${hold.userId} in route ${routeId}`);
+          }
+        }
+      }
+      
+      // Call the service cleanup method to actually clean up expired holds
+      await seatBookingService.cleanupExpiredHolds();
+      
+    } catch (error) {
+      console.error('Error in cleanupExpiredHoldsForRoute:', error);
+    }
+  }
+
+  /**
+   * Clean up expired holds and emit events
+   */
+  private async cleanupExpiredHolds(): Promise<void> {
+    try {
+      // Get all active route rooms
+      const rooms = Array.from(this.io.sockets.adapter.rooms.keys())
+        .filter(room => room.startsWith('route:'))
+        .map(room => room.replace('route:', ''));
+
+      for (const routeId of rooms) {
+        // Get all hold keys for this route
+        const holdKeys = await redis.keys(`hold:${routeId}:*`);
+        
+        for (const holdKey of holdKeys) {
+          const holdData = await redis.get(holdKey);
+          
+          if (holdData) {
+            const hold = JSON.parse(holdData);
+            
+            // Check if hold is expired
+            if (Date.now() > hold.expiresAt) {
+              // Extract seat label from hold key
+              const seatLabel = holdKey.split(':')[2];
+              
+              // Emit seat expired event
+              this.io.to(`route:${routeId}`).emit('seat:expired', {
+                seatLabel,
+                routeId,
+                userId: hold.userId,
+                expiredAt: new Date().toISOString()
+              });
+              
+              // Emit seat status change to available
+              this.io.to(`route:${routeId}`).emit('seat:status:changed', {
+                routeId,
+                seatLabel,
+                status: 'available',
+                userId: hold.userId
+              });
+              
+              console.log(`🕒 Seat ${seatLabel} expired for user ${hold.userId} in route ${routeId}`);
+            }
+          }
+        }
+      }
+      
+      // Call the service cleanup method to actually clean up expired holds
+      await seatBookingService.cleanupExpiredHolds();
+      
+    } catch (error) {
+      console.error('Error in cleanupExpiredHolds:', error);
+    }
+  }
+
   /**
    * Initialize all socket event handlers
    */
@@ -216,6 +346,10 @@ export class SocketHandlers {
       
       console.log(`User ${socketData.userId} joined route ${routeId}`);
       
+      // Clean up any expired holds and inconsistent seat states for this route first
+      await this.cleanupExpiredHoldsForRoute(routeId);
+      await seatBookingService.cleanupInconsistentSeats(routeId);
+      
       // Send acknowledgment with seat availability
       const seats = await seatBookingService.getSeatAvailability(routeId, socketData.userId);
       
@@ -313,6 +447,11 @@ export class SocketHandlers {
       }
       
       const socketData = socket.data as SocketData;
+      
+      // Clean up any expired holds and inconsistent seat states for this route first
+      await this.cleanupExpiredHoldsForRoute(routeId);
+      await seatBookingService.cleanupInconsistentSeats(routeId);
+      
       const seats = await seatBookingService.getSeatAvailability(routeId, socketData.userId);
       
       ack({
@@ -392,7 +531,7 @@ export class SocketHandlers {
             // Get updated seat status and broadcast
             const updatedSeats = await seatBookingService.getSeatAvailability(routeId);
             this.io.to(`route:${routeId}`).emit('seat:status:changed', {
-              tripId: routeId, // Keep field name for compatibility
+              routeId: routeId, // Keep field name for compatibility
               seatLabel,
               status: updatedSeats[seatLabel] || 'available',
               userId: socketData.userId
@@ -459,7 +598,7 @@ export class SocketHandlers {
         
         // Broadcast to all users with updated seat status
         this.io.to(`route:${routeId}`).emit('seat:status:changed', {
-          tripId: routeId, // Keep field name for compatibility
+          routeId: routeId, // Keep field name for compatibility
           seatLabel,
           status: updatedSeats[seatLabel] || 'available',
           userId: socketData.userId
@@ -535,7 +674,7 @@ export class SocketHandlers {
         // Broadcast to all users in the room
         this.io.to(`route:${routeId}`).emit('seats:booked', {
           seatLabels,
-          tripId: routeId, // Keep field name for compatibility
+          routeId: routeId, // Keep field name for compatibility
           userId: socketData.userId,
           bookingId: result.bookingId
         });
@@ -608,7 +747,7 @@ export class SocketHandlers {
         
         if (result.success) {
           this.io.to(`route:${routeId}`).emit('seat:status:changed', {
-            tripId: routeId, // Keep field name for compatibility
+            routeId: routeId, // Keep field name for compatibility
             seatLabel,
             status: 'available',
             userId: socketData.userId

@@ -32,7 +32,7 @@ export interface SocketData {
 export interface SeatHoldData {
   userId: string;
   seatLabel: string;
-  tripId: string;
+  routeId: string;
   heldAt: number;
   expiresAt: number;
 }
@@ -46,7 +46,7 @@ export interface SeatStatusChangeEvent {
 }
 
 export interface BookingConfirmEvent {
-  tripId: string;
+  routeId: string;
   seatLabels: string[];
   paymentInfo?: any;
 }

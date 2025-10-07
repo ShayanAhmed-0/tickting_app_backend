@@ -34,7 +34,7 @@ export class SeatBookingClient {
 
     // Seat availability events
     this.socket.on('seats:availability', (data: any) => {
-      console.log('📋 Seat availability for trip:', data.tripId);
+      console.log('📋 Seat availability for trip:', data.routeId);
       console.log('Available seats:', data.seats);
       this.updateSeatMap(data.seats);
     });
@@ -87,11 +87,11 @@ export class SeatBookingClient {
 
     // User events
     this.socket.on('user:joined', (data: any) => {
-      console.log(`👤 User joined room. ${data.userCount} users now in trip ${data.tripId}`);
+      console.log(`👤 User joined room. ${data.userCount} users now in trip ${data.routeId}`);
     });
 
     this.socket.on('user:left', (data: any) => {
-      console.log(`👤 User left room. ${data.userCount} users remaining in trip ${data.tripId}`);
+      console.log(`👤 User left room. ${data.userCount} users remaining in trip ${data.routeId}`);
     });
 
     // Error handling

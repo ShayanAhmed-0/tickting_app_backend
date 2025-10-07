@@ -37,10 +37,10 @@ const generateSeatLayout = () => {
     { seatNumber: 44, row: 11, position: 'left' },
     { seatNumber: 47, row: 12, position: 'left' },
     { seatNumber: 48, row: 12, position: 'left' },
-    { seatNumber: 53, row: 13, position: 'left' },
-    { seatNumber: 54, row: 13, position: 'left' },
-    { seatNumber: 55, row: 14, position: 'left' },
-    { seatNumber: 56, row: 14, position: 'left' }
+    { seatNumber: 51, row: 13, position: 'left' },
+    { seatNumber: 52, row: 13, position: 'left' },
+    // { seatNumber: 55, row: 14, position: 'left' },
+    // { seatNumber: 56, row: 14, position: 'left' }
   ];
 
   // Right section seats (26 seats)
@@ -70,7 +70,9 @@ const generateSeatLayout = () => {
     { seatNumber: 45, row: 12, position: 'right' },
     { seatNumber: 46, row: 12, position: 'right' },
     { seatNumber: 49, row: 13, position: 'right' },
-    { seatNumber: 50, row: 13, position: 'right' }
+    { seatNumber: 50, row: 13, position: 'right' },
+    { seatNumber: 53, row: 14, position: 'right' },
+    { seatNumber: 54, row: 14, position: 'right' }
   ];
 
   // Combine all seats
