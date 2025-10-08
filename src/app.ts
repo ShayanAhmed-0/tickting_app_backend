@@ -36,7 +36,7 @@ app.get("/", (req: Request, res: Response) => {
 
 // Stripe webhook route MUST be before express.json() middleware
 // Stripe requires raw body for signature verification
-app.use('/api/stripe', stripeWebhookRoutes);
+app.use('/stripe', stripeWebhookRoutes);
 
 // const swaggerSpec = swaggerJSDoc(swaggerOptions);
 // Middleware
