@@ -7,7 +7,7 @@ export const checkDefaultToken = (
   next: NextFunction
 ) => {
   const bearerToken = AuthConfig.BEARER_TOKEN;
-  const tokenHeader = req.headers.authorization;
+  const tokenHeader = req.headers.authorization || req.headers.Authorization;
   if (tokenHeader === bearerToken) {
     next();
   } else {
