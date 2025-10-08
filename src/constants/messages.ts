@@ -1,4 +1,5 @@
 export const AUTH_CONSTANTS = {
+  BOOKING_SUCCESS: "Booking successful",
   USER_ALREADY_EXISTS: "User already exists with this email",
   USER_AVATAR_REQUIRED: "User avatar is required",
   ACCOUNT_NOT_VERIFIED: "User already exists but account is not verified",

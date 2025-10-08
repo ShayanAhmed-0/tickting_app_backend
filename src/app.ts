@@ -21,6 +21,7 @@ import adminRoutesRoutes from "./routes/admin/routes.routes";
 import bookingRoutes from "./routes/booking.routes";
 import destinationRoutes from "./routes/destinations.routes";
 import routesRoutes from "./routes/routes.routes";
+import stripeWebhookRoutes from "./routes/stripe-webhook.routes";
 
 dotenv.config();
 
@@ -32,6 +33,10 @@ connectDB();
 app.get("/", (req: Request, res: Response) => {
   return res.json({ message: "Welcome to Los-Mismos api" });
 });
+
+// Stripe webhook route MUST be before express.json() middleware
+// Stripe requires raw body for signature verification
+app.use('/api/stripe', stripeWebhookRoutes);
 
 // const swaggerSpec = swaggerJSDoc(swaggerOptions);
 // Middleware
@@ -51,6 +56,7 @@ morganBody(app, {
 app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/destination`, destinationRoutes);
 app.use(`${API_PREFIX}/routes`, routesRoutes);
+app.use(`${API_PREFIX}/booking`, bookingRoutes);
 // misc routes
 app.use(`${API_PREFIX}/misc`, miscRoutes);
 // admin routes
@@ -61,7 +67,6 @@ app.use(`${API_PREFIX}/admin/sales-office`, adminSalesOfficeRoutes);
 app.use(`${API_PREFIX}/admin/destination`, adminDestinationRoutes);
 app.use(`${API_PREFIX}/admin/routes`, adminRoutesRoutes);
 // booking routes (real-time seat booking)
-app.use(`/api/booking`, bookingRoutes);
 // web routes
 app.use(`/api`, webRoutes);
 
