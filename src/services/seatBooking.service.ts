@@ -534,6 +534,137 @@ export class SeatBookingService {
   }
 
   /**
+   * Clear all seats held by a specific user
+   */
+  async clearAllUserSeats(userId: string): Promise<{ success: boolean; clearedSeats: string[]; errors: string[] }> {
+    const clearedSeats: string[] = [];
+    const errors: string[] = [];
+    
+    try {
+      // Get all holds for this user
+      const userHolds = await redis.smembers(RedisKeys.userHolds(userId));
+      
+      for (const hold of userHolds) {
+        try {
+          const [routeId, seatLabel] = hold.split(':');
+          const holdKey = RedisKeys.seatHold(routeId, seatLabel);
+          const holdData = await redis.get(holdKey);
+          
+          if (holdData) {
+            const holdInfo = JSON.parse(holdData);
+            
+            // Get bus ID from route
+            const route = await Route.findById(routeId).populate('bus');
+            if (route && route.bus) {
+              const busId = (route.bus as any)._id.toString();
+              
+              // Release the seat
+              const result = await this.releaseSeat(busId, routeId, seatLabel, userId);
+              if (result.success) {
+                clearedSeats.push(`${routeId}:${seatLabel}`);
+                console.log(`✅ Cleared seat ${seatLabel} for user ${userId} in route ${routeId}`);
+              } else {
+                errors.push(`Failed to clear seat ${seatLabel} in route ${routeId}: ${result.reason}`);
+              }
+            } else {
+              errors.push(`Route or bus not found for seat ${seatLabel} in route ${routeId}`);
+            }
+          }
+        } catch (error) {
+          const errorMsg = `Error clearing seat ${hold}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          errors.push(errorMsg);
+          console.error(errorMsg);
+        }
+      }
+      
+      // Clear the user holds set from Redis
+      await redis.del(RedisKeys.userHolds(userId));
+      
+      console.log(`🧹 Cleared ${clearedSeats.length} seats for user ${userId}, ${errors.length} errors`);
+      
+      return {
+        success: true,
+        clearedSeats,
+        errors
+      };
+      
+    } catch (error) {
+      console.error('Error clearing all user seats:', error);
+      return {
+        success: false,
+        clearedSeats,
+        errors: [...errors, error instanceof Error ? error.message : 'Unknown error']
+      };
+    }
+  }
+
+  /**
+   * Clear all seats held by a user for a specific route
+   */
+  async clearUserSeatsForRoute(userId: string, routeId: string): Promise<{ success: boolean; clearedSeats: string[]; errors: string[] }> {
+    const clearedSeats: string[] = [];
+    const errors: string[] = [];
+    
+    try {
+      // Get all holds for this user
+      const userHolds = await redis.smembers(RedisKeys.userHolds(userId));
+      
+      for (const hold of userHolds) {
+        try {
+          const [holdRouteId, seatLabel] = hold.split(':');
+          
+          // Only process holds for the specified route
+          if (holdRouteId === routeId) {
+            const holdKey = RedisKeys.seatHold(routeId, seatLabel);
+            const holdData = await redis.get(holdKey);
+            
+            if (holdData) {
+              const holdInfo = JSON.parse(holdData);
+              
+              // Get bus ID from route
+              const route = await Route.findById(routeId).populate('bus');
+              if (route && route.bus) {
+                const busId = (route.bus as any)._id.toString();
+                
+                // Release the seat
+                const result = await this.releaseSeat(busId, routeId, seatLabel, userId);
+                if (result.success) {
+                  clearedSeats.push(`${routeId}:${seatLabel}`);
+                  console.log(`✅ Cleared seat ${seatLabel} for user ${userId} in route ${routeId}`);
+                } else {
+                  errors.push(`Failed to clear seat ${seatLabel} in route ${routeId}: ${result.reason}`);
+                }
+              } else {
+                errors.push(`Route or bus not found for seat ${seatLabel} in route ${routeId}`);
+              }
+            }
+          }
+        } catch (error) {
+          const errorMsg = `Error clearing seat ${hold}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          errors.push(errorMsg);
+          console.error(errorMsg);
+        }
+      }
+      
+      console.log(`🧹 Cleared ${clearedSeats.length} seats for user ${userId} in route ${routeId}, ${errors.length} errors`);
+      
+      return {
+        success: true,
+        clearedSeats,
+        errors
+      };
+      
+    } catch (error) {
+      console.error('Error clearing user seats for route:', error);
+      return {
+        success: false,
+        clearedSeats,
+        errors: [...errors, error instanceof Error ? error.message : 'Unknown error']
+      };
+    }
+  }
+
+  /**
    * Get route information with schedule
    */
   async getRouteInfo(routeId: string): Promise<any> {

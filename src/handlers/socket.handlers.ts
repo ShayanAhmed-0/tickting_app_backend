@@ -398,6 +398,34 @@ export class SocketHandlers {
         });
       }
       
+      // Clear all seats held by this user for this specific route
+      try {
+        const clearResult = await seatBookingService.clearUserSeatsForRoute(socketData.userId, routeId);
+        
+        if (clearResult.success && clearResult.clearedSeats.length > 0) {
+          console.log(`🧹 Cleared ${clearResult.clearedSeats.length} seats for user ${socketData.userId} leaving route ${routeId}`);
+          
+          // Broadcast seat status changes for cleared seats
+          for (const seat of clearResult.clearedSeats) {
+            const [_, seatLabel] = seat.split(':');
+            this.io.to(`route:${routeId}`).emit('seat:status:changed', {
+              routeId: routeId, // Keep field name for compatibility
+              seatLabel,
+              status: 'available',
+              userId: socketData.userId
+            });
+          }
+        }
+        
+        // Log any errors that occurred during seat clearing
+        if (clearResult.errors.length > 0) {
+          console.error(`❌ Errors clearing seats for user ${socketData.userId} leaving route ${routeId}:`, clearResult.errors);
+        }
+        
+      } catch (error) {
+        console.error('Error clearing seats on leave route:', error);
+      }
+      
       socket.leave(`route:${routeId}`);
       socketData.currentTrip = undefined;
       
@@ -736,26 +764,43 @@ export class SocketHandlers {
     const socketData = socket.data as SocketData;
     console.log(`User disconnected: ${socketData.userId} (Socket: ${socket.id})`);
     
-    // Release all held seats
-    const heldSeats = Array.from(socketData.heldSeats);
-    
-    for (const seat of heldSeats) {
-      try {
-        const [busId, routeId, seatLabel] = seat.split(':');
+    try {
+      // Clear all seats held by this user
+      const clearResult = await seatBookingService.clearAllUserSeats(socketData.userId);
+      
+      if (clearResult.success && clearResult.clearedSeats.length > 0) {
+        console.log(`🧹 Cleared ${clearResult.clearedSeats.length} seats for disconnected user ${socketData.userId}`);
         
-        const result = await seatBookingService.releaseSeat(busId, routeId, seatLabel, socketData.userId);
+        // Group cleared seats by route for efficient broadcasting
+        const seatsByRoute: Record<string, string[]> = {};
+        clearResult.clearedSeats.forEach(seat => {
+          const [routeId, seatLabel] = seat.split(':');
+          if (!seatsByRoute[routeId]) {
+            seatsByRoute[routeId] = [];
+          }
+          seatsByRoute[routeId].push(seatLabel);
+        });
         
-        if (result.success) {
-          this.io.to(`route:${routeId}`).emit('seat:status:changed', {
-            routeId: routeId, // Keep field name for compatibility
-            seatLabel,
-            status: 'available',
-            userId: socketData.userId
-          });
+        // Broadcast seat status changes for each route
+        for (const [routeId, seatLabels] of Object.entries(seatsByRoute)) {
+          for (const seatLabel of seatLabels) {
+            this.io.to(`route:${routeId}`).emit('seat:status:changed', {
+              routeId: routeId, // Keep field name for compatibility
+              seatLabel,
+              status: 'available',
+              userId: socketData.userId
+            });
+          }
         }
-      } catch (error) {
-        console.error('Error releasing seat on disconnect:', error);
       }
+      
+      // Log any errors that occurred during seat clearing
+      if (clearResult.errors.length > 0) {
+        console.error(`❌ Errors clearing seats for user ${socketData.userId}:`, clearResult.errors);
+      }
+      
+    } catch (error) {
+      console.error('Error clearing seats on disconnect:', error);
     }
     
     // Notify route rooms about user leaving
