@@ -64,5 +64,5 @@ const RouteSchema = new Schema<IRoute>({
 RouteSchema.index({ origin: 1, destination: 1 });
 
 // Model export
-const Route = model<IRoute>('Route', RouteSchema);
-export default Route;
+const RouteModel = model<IRoute>('Route', RouteSchema);
+export default RouteModel;

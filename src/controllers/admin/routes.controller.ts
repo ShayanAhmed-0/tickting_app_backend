@@ -3,7 +3,7 @@ import { STATUS_CODES } from "../../constants/statusCodes";
 import ResponseUtil from "../../utils/Response/responseUtils";
 import { ADMIN_CONSTANTS } from "../../constants/messages";
 import { CustomError } from "../../classes/CustomError";
-import Route from "../../models/route.model";
+import RouteModel from "../../models/route.model";
 import Destination from "../../models/destinations.model";
 import Bus from "../../models/bus.model";
 import helper from "../../helper";
@@ -21,7 +21,7 @@ export const createRoute = async (req: Request, res: Response) => {
     } = req.body;
 
     // Check if route with same name already exists
-    const existingRoute = await Route.findOne({
+    const existingRoute = await RouteModel.findOne({
       name: name,
     });
 
@@ -30,7 +30,7 @@ export const createRoute = async (req: Request, res: Response) => {
     }
 
     // Create new route
-    const newRoute = new Route({
+    const newRoute = new RouteModel({
       name,
       origin,
       destination,
@@ -179,14 +179,14 @@ export const getRoutes = async (req: Request, res: Response) => {
 
     // Test direct query first
     console.log('🧪 Testing direct Route.find()...');
-    const directQuery = await Route.find(query).populate(populateOptions).limit(5);
+    const directQuery = await RouteModel.find(query).populate(populateOptions).limit(5);
     console.log('📋 Direct Query Result:', {
       count: Array.isArray(directQuery) ? directQuery.length : 0,
       routes: Array.isArray(directQuery) ? directQuery.map((r: any) => ({ id: r._id, name: r.name })) : []
     });
 
     // Try pagination helper first
-    const routes = await helper.PaginateHelper.customPaginate("routes", Route as any, query, options);
+    const routes = await helper.PaginateHelper.customPaginate("routes", RouteModel as any, query, options);
     
     console.log('📋 Routes Result:', JSON.stringify({
       totalDocs: routes.totalDocs,
@@ -203,9 +203,9 @@ export const getRoutes = async (req: Request, res: Response) => {
     if (!Array.isArray(routes.docs) || routes.docs.length === 0) {
       console.log('⚠️ Pagination helper returned no docs, trying manual pagination...');
       
-      const totalCount = await Route.countDocuments(query);
+      const totalCount = await RouteModel.countDocuments(query);
       const skip = ((Number(page) || 1) - 1) * (Number(limit) || 10);
-      const manualQuery = await Route.find(query)
+      const manualQuery = await RouteModel.find(query)
         .populate(populateOptions)
         .sort(sortOptions)
         .skip(skip)
@@ -283,7 +283,7 @@ export const getRouteById = async (req: Request, res: Response) => {
       { path: "bus", select: "code serialNumber capacity seatLayout" },
       { path: "intermediateStops", select: "name description" }
     ];
-    const route = await Route.findById(id).populate(populateOptions);
+    const route = await RouteModel.findById(id).populate(populateOptions);
     return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { route }, ADMIN_CONSTANTS.ROUTE_FETCHED);
   } catch (err) {
     if (err instanceof CustomError)
@@ -309,7 +309,7 @@ export const getRouteFilterOptions = async (req: Request, res: Response) => {
     }).select('code serialNumber capacity').sort({ code: 1 });
 
     // Get unique days from routes
-    const dayTimeData = await Route.aggregate([
+    const dayTimeData = await RouteModel.aggregate([
       { $match: { isActive: true } },
       { $unwind: '$dayTime' },
       { $group: { _id: '$dayTime.day' } },
@@ -319,7 +319,7 @@ export const getRouteFilterOptions = async (req: Request, res: Response) => {
     const availableDays = dayTimeData.map(item => item._id);
 
     // Get time ranges from routes
-    const timeData = await Route.aggregate([
+    const timeData = await RouteModel.aggregate([
       { $match: { isActive: true } },
       { $unwind: '$dayTime' },
       { 
@@ -337,7 +337,7 @@ export const getRouteFilterOptions = async (req: Request, res: Response) => {
     } : null;
 
     // Get popular routes (most frequently used)
-    const popularRoutes = await Route.aggregate([
+    const popularRoutes = await RouteModel.aggregate([
       { $match: { isActive: true } },
       { 
         $lookup: {
@@ -414,7 +414,7 @@ export const searchRoutes = async (req: Request, res: Response) => {
 
     const searchQuery = q.toString().trim();
     
-    const routes = await Route.find({
+    const routes = await RouteModel.find({
       isActive: true,
       $or: [
         { name: { $regex: searchQuery, $options: 'i' } },

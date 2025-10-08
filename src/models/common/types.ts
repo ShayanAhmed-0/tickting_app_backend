@@ -11,6 +11,11 @@ export enum UserRole {
   CUSTOMER = "customer",
 }
 
+export enum ForWho {
+  SELF = "self",
+  FAMILY = "family",
+}
+
 export enum DaysEnums {
   MONDAY = "monday",
   TUESDAY = "tuesday",
@@ -157,6 +162,11 @@ export enum SeatStatus {
   BOOKED = "booked",
   SELECTED = "selected",
   HELD = "held",
+}
+
+export enum TripType{
+  ONE_WAY = "one_way",
+  ROUND_TRIP = "round_trip",
 }
 
 // Common interface types
