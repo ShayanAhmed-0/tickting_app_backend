@@ -532,7 +532,7 @@ export class SocketHandlers {
           data: {
             routeId,
             seatLabel,
-            status: 'held',
+            status: 'selected',
             expiresAt: result.expiresAt,
             extended: result.extended || false,
             timestamp: new Date().toISOString()
