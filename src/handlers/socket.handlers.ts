@@ -542,7 +542,7 @@ export class SocketHandlers {
         const statusChangeEvent: SeatStatusChangeEvent = {
           routeId, // Keep field name for compatibility
           seatLabel,
-          status: 'selected' as const,
+          status: 'held' as const,
           expiresAt: result.expiresAt,
           userId: socketData.userId
         };
