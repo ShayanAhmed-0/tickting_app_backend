@@ -110,23 +110,23 @@ export const getRoutes = async (req: Request, res: Response) => {
       query['dayTime.day'] = day;
     }
 
-    // Time filter (for specific time range)
-    if (time) {
-      const timeParts = time.toString().split('-');
-      if (timeParts.length === 2) {
-        const startTime = timeParts[0];
-        const endTime = timeParts[1];
-        query['dayTime.time'] = {
-          $gte: new Date(`1970-01-01T${startTime}:00.000Z`),
-          $lte: new Date(`1970-01-01T${endTime}:00.000Z`)
-        };
-      }
-    }
+    // // Time filter (for specific time range)
+    // if (time) {
+    //   const timeParts = time.toString().split('-');
+    //   if (timeParts.length === 2) {
+    //     const startTime = timeParts[0];
+    //     const endTime = timeParts[1];
+    //     query['dayTime.time'] = {
+    //       $gte: new Date(`1970-01-01T${startTime}:00.000Z`),
+    //       $lte: new Date(`1970-01-01T${endTime}:00.000Z`)
+    //     };
+    //   }
+    // }
 
     // Bus filter
-    if (bus) {
-      query.bus = bus;
-    }
+    // if (bus) {
+    //   query.bus = bus;
+    // }
 
     // Search filter (searches in route name, origin, destination names)
     if (search) {
@@ -137,18 +137,18 @@ export const getRoutes = async (req: Request, res: Response) => {
       ];
     }
 
-    // Date filtering for departure and return dates
-    if (departureDate) {
-      const depDate = new Date(departureDate.toString());
-      const nextDay = new Date(depDate);
-      nextDay.setDate(nextDay.getDate() + 1);
+  // // Date filtering for departure and return dates
+  //   if (departureDate) {
+  //     const depDate = new Date(departureDate.toString());
+  //     const nextDay = new Date(depDate);
+  //     nextDay.setDate(nextDay.getDate() + 1);
       
-      // Filter routes that have schedules on the departure date
-      query['dayTime.time'] = {
-        $gte: depDate,
-        $lt: nextDay
-      };
-    }
+  //     // Filter routes that have schedules on the departure date
+  //     query['dayTime.time'] = {
+  //       $gte: depDate,
+  //       $lt: nextDay
+  //     };
+  //   }  
 
     // Build sort options
     let sortOptions: Record<string, 1 | -1> = { createdAt: -1 };
@@ -162,7 +162,7 @@ export const getRoutes = async (req: Request, res: Response) => {
     const populateOptions = [
       { path: "origin", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
       { path: "destination", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
-      { path: "bus", select: "code serialNumber capacity" },
+      { path: "bus", select: "code serialNumber capacity seatLayout amenities" },
       { path: "intermediateStops", select: "name description" }
     ];
 
@@ -174,19 +174,42 @@ export const getRoutes = async (req: Request, res: Response) => {
       populate: populateOptions,
     };
 
-    console.log('🔍 Route Query:', JSON.stringify(query, null, 2));
-    console.log('📊 Query Options:', JSON.stringify(options, null, 2));
-
-    // Test direct query first
-    console.log('🧪 Testing direct Route.find()...');
-    const directQuery = await RouteModel.find(query).populate(populateOptions).limit(5);
-    console.log('📋 Direct Query Result:', {
-      count: Array.isArray(directQuery) ? directQuery.length : 0,
-      routes: Array.isArray(directQuery) ? directQuery.map((r: any) => ({ id: r._id, name: r.name })) : []
-    });
 
     // Try pagination helper first
     const routes = await helper.PaginateHelper.customPaginate("routes", RouteModel as any, query, options);
+    
+    // Calculate available seats for each route
+    const routesWithSeatInfo = Array.isArray(routes.routes) ? routes.routes.map((route: any) => {
+      const routeObj = route.toObject ? route.toObject() : route;
+      
+      if (routeObj.bus && routeObj.bus.seatLayout && routeObj.bus.seatLayout.seats) {
+        const seats = routeObj.bus.seatLayout.seats;
+        const totalSeats = seats.length;
+        const availableSeats = seats.filter((seat: any) => 
+          seat.status === 'available' && seat.isAvailable === true
+        ).length;
+        const bookedSeats = seats.filter((seat: any) => 
+          seat.status === 'booked'
+        ).length;
+        const heldSeats = seats.filter((seat: any) => 
+          seat.status === 'held' || seat.status === 'selected'
+        ).length;
+
+        delete routeObj.bus.seatLayout;
+
+        return {
+          ...routeObj,
+          seatAvailability: {
+            total: totalSeats,
+            available: availableSeats,
+            booked: bookedSeats,
+            held: heldSeats,
+          }
+        };
+      }
+      
+      return routeObj;
+    }) : [];
     
     console.log('📋 Routes Result:', JSON.stringify({
       totalDocs: routes.totalDocs,
@@ -199,35 +222,6 @@ export const getRoutes = async (req: Request, res: Response) => {
       docs: Array.isArray(routes.docs) ? routes.docs.map((r: any) => ({ id: r._id, name: r.name })) : []
     }, null, 2));
 
-    // If pagination helper fails, try manual pagination
-    if (!Array.isArray(routes.docs) || routes.docs.length === 0) {
-      console.log('⚠️ Pagination helper returned no docs, trying manual pagination...');
-      
-      const totalCount = await RouteModel.countDocuments(query);
-      const skip = ((Number(page) || 1) - 1) * (Number(limit) || 10);
-      const manualQuery = await RouteModel.find(query)
-        .populate(populateOptions)
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(Number(limit) || 10);
-      
-      console.log('📋 Manual Query Result:', {
-        totalCount,
-        skip,
-        limit: Number(limit) || 10,
-        count: manualQuery.length,
-        routes: manualQuery.map((r: any) => ({ id: r._id, name: r.name }))
-      });
-
-      // Override the pagination helper result
-      routes.docs = manualQuery;
-      routes.totalDocs = totalCount;
-      routes.page = Number(page) || 1;
-      routes.limit = Number(limit) || 10;
-      routes.totalPages = Math.ceil(totalCount / (Number(limit) || 10));
-      routes.hasNextPage = (Number(page) || 1) < Math.ceil(totalCount / (Number(limit) || 10));
-      routes.hasPrevPage = (Number(page) || 1) > 1;
-    }
 
     // Add filtering metadata
     const filterMetadata = {
@@ -254,7 +248,7 @@ export const getRoutes = async (req: Request, res: Response) => {
       res, 
       STATUS_CODES.SUCCESS, 
       { 
-        routes: routes.docs || [],
+        routes: routesWithSeatInfo || [],
         pagination: {
           page: routes.page || 1,
           limit: routes.limit || 10,
@@ -280,11 +274,59 @@ export const getRouteById = async (req: Request, res: Response) => {
     const populateOptions = [
       { path: "origin", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
       { path: "destination", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
-      { path: "bus", select: "code serialNumber capacity seatLayout" },
+      { path: "bus", select: "code serialNumber capacity seatLayout amenities" },
       { path: "intermediateStops", select: "name description" }
     ];
     const route = await RouteModel.findById(id).populate(populateOptions);
-    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { route }, ADMIN_CONSTANTS.ROUTE_FETCHED);
+    
+    if (!route) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Route not found");
+    }
+
+    const routeObj = route.toObject();
+
+    // Calculate available seats
+    const bus = routeObj.bus as any;
+    if (bus && bus.seatLayout && bus.seatLayout.seats) {
+      const seats = bus.seatLayout.seats;
+      const totalSeats = seats.length;
+      const availableSeats = seats.filter((seat: any) => 
+        seat.status === 'available' && seat.isAvailable === true
+      ).length;
+      const bookedSeats = seats.filter((seat: any) => 
+        seat.status === 'booked'
+      ).length;
+      const heldSeats = seats.filter((seat: any) => 
+        seat.status === 'held' || seat.status === 'selected'
+      ).length;
+
+      const routeWithSeatInfo = {
+        ...routeObj,
+        seatAvailability: {
+          total: totalSeats,
+          available: availableSeats,
+          booked: bookedSeats,
+          held: heldSeats,
+          availableSeats: seats.filter((seat: any) => 
+            seat.status === 'available' && seat.isAvailable === true
+          )
+        }
+      };
+
+      return ResponseUtil.successResponse(
+        res, 
+        STATUS_CODES.SUCCESS, 
+        { route: routeWithSeatInfo }, 
+        ADMIN_CONSTANTS.ROUTE_FETCHED
+      );
+    }
+
+    return ResponseUtil.successResponse(
+      res, 
+      STATUS_CODES.SUCCESS, 
+      { route: routeObj }, 
+      ADMIN_CONSTANTS.ROUTE_FETCHED
+    );
   } catch (err) {
     if (err instanceof CustomError)
       return ResponseUtil.errorResponse(res, err.statusCode, err.message);
@@ -422,16 +464,50 @@ export const searchRoutes = async (req: Request, res: Response) => {
         { 'destination.name': { $regex: searchQuery, $options: 'i' } }
       ]
     })
-    .populate('origin', 'name description')
-    .populate('destination', 'name description')
-    .populate('bus', 'code serialNumber capacity')
+    .populate('origin', 'name description priceToDFW priceFromDFW priceRoundTrip')
+    .populate('destination', 'name description priceToDFW priceFromDFW priceRoundTrip')
+    .populate('bus', 'code serialNumber capacity seatLayout amenities')
     .limit(Number(limit))
     .sort({ name: 1 });
+
+    // Calculate available seats for each route
+    const routesWithSeatInfo = routes.map((route: any) => {
+      const routeObj = route.toObject();
+      
+      if (routeObj.bus && routeObj.bus.seatLayout && routeObj.bus.seatLayout.seats) {
+        const seats = routeObj.bus.seatLayout.seats;
+        const totalSeats = seats.length;
+        const availableSeats = seats.filter((seat: any) => 
+          seat.status === 'available' && seat.isAvailable === true
+        ).length;
+        const bookedSeats = seats.filter((seat: any) => 
+          seat.status === 'booked'
+        ).length;
+        const heldSeats = seats.filter((seat: any) => 
+          seat.status === 'held' || seat.status === 'selected'
+        ).length;
+
+        return {
+          ...routeObj,
+          seatAvailability: {
+            total: totalSeats,
+            available: availableSeats,
+            booked: bookedSeats,
+            held: heldSeats,
+            availableSeats: seats.filter((seat: any) => 
+              seat.status === 'available' && seat.isAvailable === true
+            )
+          }
+        };
+      }
+      
+      return routeObj;
+    });
 
     return ResponseUtil.successResponse(
       res,
       STATUS_CODES.SUCCESS,
-      { routes },
+      { routes: routesWithSeatInfo },
       'Search results fetched successfully'
     );
   } catch (err) {

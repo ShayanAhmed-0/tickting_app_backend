@@ -16,7 +16,8 @@ const passengerSchema = z.object({
   
   dob: z.string()
     .min(1, "Date of birth is required")
-    .or(z.coerce.date()),
+    .or(z.coerce.date())
+    .optional(),
   
   contactNumber: z.string()
     .min(1, "Contact number is required")
@@ -25,6 +26,7 @@ const passengerSchema = z.object({
   DocumentId: z.string()
     .min(1, "Document ID is required")
     .max(100, "Document ID must be less than 100 characters")
+    .optional(),
 });
 
 // Book seats schema (for both cash and Stripe payment intent creation)
@@ -37,9 +39,9 @@ export const bookSeatsSchema: ZodSchema<{
     seatLabel: string;
     fullName: string;
     gender: string;
-    dob: string | Date;
+    dob?: string | Date | null;
     contactNumber: string;
-    DocumentId: string;
+    DocumentId?: string | null;
   }>;
 }> = z.object({
   routeId: z.string()

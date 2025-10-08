@@ -40,10 +40,11 @@ const BookingSchema = new Schema<IBooking>({
     lastName: String,
     idType: String,
     idNumber: String,
-    dob: Date,
+    dob: Date || null,
     seatLabel: String,
     seatIndex: Number,
-    passengerRef: String // for per-passenger QR tickets if needed
+    passengerRef: String, // for per-passenger QR tickets if needed
+    DocumentId: String || null
   }],
   totalAmount: { type: Number, required: true },
   currency: { type: String, default: 'MXN' },
