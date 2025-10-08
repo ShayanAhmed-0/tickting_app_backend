@@ -528,7 +528,7 @@ export class SocketHandlers {
         // Send acknowledgment
         ack({
           success: true,
-          message: `Successfully held seat ${seatLabel}`,
+          message: `Seat ${seatLabel} Selected Successfully`,
           data: {
             routeId,
             seatLabel,
