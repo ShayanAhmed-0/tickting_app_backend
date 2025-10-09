@@ -194,6 +194,8 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
 
     // Update bus seat status to BOOKED
     for (const seat of getUserSeats) {
+      if (!seat.seatLabel) continue; // Skip if seatLabel is undefined
+      
       await BusModel.updateOne(
         { 
           _id: getBus._id,
@@ -206,6 +208,13 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
           } 
         }
       );
+
+      // Delete the Redis hold for this seat since it's now permanently booked
+      const holdKey = RedisKeys.seatHold(routeId as string, seat.seatLabel);
+      await redis.del(holdKey);
+      
+      // Remove from user holds set
+      await redis.srem(RedisKeys.userHolds(userId as string), `${routeId}:${seat.seatLabel}`);
 
       // Emit seat status change to all users in the route room
       io.to(`route:${routeId}`).emit('seat:status:changed', {
