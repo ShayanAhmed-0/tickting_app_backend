@@ -247,6 +247,8 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
 
     // Update bus seat status to BOOKED
     for (const passenger of passengersData) {
+      if (!passenger.seatLabel) continue; // Skip if seatLabel is undefined
+      
       await BusModel.updateOne(
         {
           _id: getBus._id,
@@ -259,6 +261,13 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
           }
         }
       );
+
+      // Delete the Redis hold for this seat since it's now permanently booked
+      const holdKey = RedisKeys.seatHold(routeId, passenger.seatLabel);
+      await redis.del(holdKey);
+      
+      // Remove from user holds set
+      await redis.srem(RedisKeys.userHolds(userId), `${routeId}:${passenger.seatLabel}`);
 
       // Emit seat status change to all users in the route room
       io.to(`route:${routeId}`).emit('seat:status:changed', {
@@ -316,6 +325,11 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       status: TransactionStatus.SUCCEEDED,
       createdBy: userId
     });
+
+    // Clean up passengers data from Redis since booking is complete
+    if (metadata.passengersRedisKey) {
+      await redis.del(metadata.passengersRedisKey);
+    }
 
     // Return the same response format as cash payment
     return ResponseUtil.successResponse(
