@@ -118,8 +118,9 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
     const paymentIntent = await createPaymentIntent(getTotalPrice, {
       routeId: routeId,
       userId: userId,
+      bookedBy: bookedBy,
       totalPrice: getTotalPrice,
-      seats: JSON.stringify(getUserSeats),
+      seats: getUserSeats.length,
       busId: getBus._id?.toString() || busId,
       passengers: JSON.stringify(passengers),
     });
@@ -132,7 +133,8 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
         clientSecret: paymentIntent.client_secret,
         paymentIntentId: paymentIntent.id,
         amount: getTotalPrice,
-        bookingsCount: getUserSeats.length
+        bookingsCount: getUserSeats.length,
+        data: req.body
       },
       "Payment intent created successfully"
     );
