@@ -115,6 +115,25 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       getTotalPrice = getTotalPrice * 2;
     }
     if(paymentType === "stripe") {
+    // Add passengers data in redis with unique key and send that key in payment intent
+    const { v4: uuidv4 } = require('uuid');
+    const passengersRedisKey = `booking:passengers:${uuidv4()}`;
+    await redis.set(passengersRedisKey, JSON.stringify(passengers), 'EX', 15 * 60); // expires in 15 min
+    
+    // Extend seat hold timer to give user enough time to complete payment (20 minutes)
+    const extendedHoldDuration = 20 * 60; // 20 minutes in seconds
+    for (const seatLabel of seatLabels) {
+      const holdKey = RedisKeys.seatHold(routeId, seatLabel);
+      const holdData = await redis.get(holdKey);
+      
+      if (holdData) {
+        const hold = JSON.parse(holdData);
+        // Update the expiration time
+        hold.expiresAt = Date.now() + (extendedHoldDuration * 1000);
+        await redis.setex(holdKey, extendedHoldDuration, JSON.stringify(hold));
+      }
+    }
+
     const paymentIntent = await createPaymentIntent(getTotalPrice, {
       routeId: routeId,
       userId: userId,
@@ -122,7 +141,8 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       totalPrice: getTotalPrice,
       seats: getUserSeats.length,
       busId: getBus._id?.toString() || busId,
-      passengers: JSON.stringify(passengers),
+      // passengers: JSON.stringify(passengers),
+      passengersRedisKey: passengersRedisKey
     });
 
     // Return payment intent client secret to frontend
