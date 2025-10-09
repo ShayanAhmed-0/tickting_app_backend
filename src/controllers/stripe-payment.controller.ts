@@ -9,7 +9,7 @@ import PassengerModel from "../models/passenger.models";
 import RouteModel from "../models/route.model";
 import PaymentTransaction from "../models/payment-transaction.model";
 import { QRCodeUtils } from "../utils/QRCode";
-import { SeatStatus, PaymentGateway, TransactionStatus } from "../models/common/types";
+import { SeatStatus, PaymentGateway, TransactionStatus, ForWho, TripType, UserRole } from "../models/common/types";
 import { AUTH_CONSTANTS } from "../constants/messages";
 import { io } from "../server";
 import { redis, RedisKeys } from "../config/redis";
@@ -47,9 +47,10 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
     const metadata = paymentIntent.metadata;
     const userId = metadata.userId;
     const routeId = metadata.routeId;
+    const bookedBy = metadata.bookedBy;
     const busId = metadata.busId;
     const passengersData = metadata.passengers ? JSON.parse(metadata.passengers) : [];
-    const seatsData = metadata.seats ? JSON.parse(metadata.seats) : [];
+    const seatsData = metadata.seats ? parseInt(metadata.seats) : 0;
 
     if (!userId || !routeId || !busId) {
       return ResponseUtil.errorResponse(
@@ -70,7 +71,7 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       const existingPassengers = await PassengerModel.find({
         profile: userId,
         busId: busId
-      }).sort({ createdAt: -1 }).limit(seatsData.length);
+      }).sort({ createdAt: -1 }).limit(seatsData);
 
       if (existingPassengers.length > 0) {
         // Generate QR code for existing booking
@@ -198,22 +199,22 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       }
     }
 
-    if (notHeldSeats.length > 0) {
-      const notHeldLabels = notHeldSeats.join(', ');
-      return ResponseUtil.errorResponse(
-        res,
-        STATUS_CODES.BAD_REQUEST,
-        `You must hold seats ${notHeldLabels} before booking. Please select and hold the seats first.`
-      );
-    }
+    // if (notHeldSeats.length > 0) {
+    //   const notHeldLabels = notHeldSeats.join(', ');
+    //   return ResponseUtil.errorResponse(
+    //     res,
+    //     STATUS_CODES.BAD_REQUEST,
+    //     `You must hold seats ${notHeldLabels} before booking. Please select and hold the seats first.`
+    //   );
+    // }
 
     // Determine booking type
-    let forType = "SELF";
+    let forType = ForWho.SELF;
     let groupTicketSerial = null;
     const passengersDB = [];
 
     if (passengersData.length > 1) {
-      forType = "FAMILY";
+      forType = ForWho.FAMILY;
       groupTicketSerial = `TKT-${Date.now()}-${passengersData.length}`;
     }
 
@@ -222,8 +223,8 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       const passenger = passengersData[i];
 
       const create = await PassengerModel.create({
-        profile: userId,
-        bookedBy: "USER",
+        user: userId,
+        bookedBy: bookedBy? bookedBy : UserRole.CUSTOMER,
         seatLabel: passenger.seatLabel,
         busId: getBus._id,
         for: forType,
@@ -234,7 +235,7 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
         dob: passenger.dob,
         contactNumber: passenger.contactNumber,
         DocumentId: passenger.DocumentId,
-        type: "ONE_WAY",
+        type: TripType.ONE_WAY,
         From: (getRoutePrice as any)?.origin?.name || "Origin",
         To: (getRoutePrice as any)?.destination?.name || "Destination",
         DepartureDate: (getRoutePrice as any)?.departureTime || new Date(),
