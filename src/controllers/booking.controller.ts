@@ -14,6 +14,8 @@ import { ForWho, SeatStatus, TripType, UserRole } from "../models/common/types";
 import { io } from "../server";
 import AuthModel from "../models/auth.model";
 import { redis, RedisKeys } from "../config/redis";
+import { Booking } from "../models";
+import helper from "../helper";
 
 export const bookSeats = async (req: CustomRequest, res: Response) => {
   try {
@@ -249,6 +251,10 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       // Generate QR code as base64 string for this passenger
       const qrCodeBase64 = await QRCodeUtils.generateQRCodeAsBase64(qrCodeData);
 
+      // Save QR code to passenger record in database
+      passenger.qrCode = qrCodeBase64;
+      await passenger.save();
+
       // Add QR code to passenger data
       passengersWithQR.push({
         ...passenger.toObject(),
@@ -279,6 +285,56 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       STATUS_CODES.SUCCESS,
       {},
       AUTH_CONSTANTS.BOOKING_SUCCESS
+    );
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const getBookingHistory = async (req: CustomRequest, res: Response) => {
+  try {
+    const userId = req.authId;
+    if(!userId) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "User not found");
+    }
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+    const query = { user: userId };
+    const options = {
+      page: Number(page),
+      limit: Number(limit),
+      sort: { createdAt: -1 } as Record<string, 1 | -1>,
+    };
+    const bookings = await helper.PaginateHelper.customPaginate("bookings", PassengerModel, query, options);
+    // const bookings = await Booking.find({ user: userId }).sort({ createdAt: -1 });
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { bookings },
+      "Bookings fetched successfully"
+    );
+  } catch (err) {
+    if (err instanceof CustomError) 
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const getLatestBooking = async (req: CustomRequest, res: Response) => {
+  try {
+    const userId = req.authId;
+    if(!userId) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "User not found");
+    }
+    const latestBooking = await PassengerModel.findOne({ user: userId }).sort({ createdAt: -1 });
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { latestBooking },
+      "Latest booking fetched successfully"
     );
   } catch (err) {
     if (err instanceof CustomError)

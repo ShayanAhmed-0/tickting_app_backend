@@ -68,48 +68,33 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
     });
 
     if (existingTransaction) {
-      // Booking already processed, retrieve existing data
+      // Booking already processed, retrieve existing data with QR codes
       const existingPassengers = await PassengerModel.find({
-        profile: userId,
+        user: userId,
         busId: busId
       }).sort({ createdAt: -1 }).limit(seatsData);
 
       if (existingPassengers.length > 0) {
-        // Generate QR code for existing booking
         const groupTicketSerial = existingPassengers[0].groupTicketSerial;
-        const getRoutePrice = await RouteModel.findById(routeId).populate('origin destination');
-
-        const qrCodeData = QRCodeUtils.createBookingQRData({
-          userId: userId,
-          routeId: routeId,
-          busId: busId,
-          passengers: existingPassengers,
-          routeInfo: {
-            from: (getRoutePrice as any)?.origin?.name || "Origin",
-            to: (getRoutePrice as any)?.destination?.name || "Destination",
-            departureDate: (getRoutePrice as any)?.departureTime || new Date(),
-            returnDate: new Date()
-          },
-          paymentType: "stripe",
-          totalPrice: paymentIntent.amount / 100,
-          groupTicketSerial: groupTicketSerial || undefined
-        });
-
-        const qrCodeBase64 = await QRCodeUtils.generateQRCodeAsBase64(qrCodeData);
+        
+        // Format passengers with their stored QR codes
+        const passengersWithQR = existingPassengers.map((passenger) => ({
+          ...passenger.toObject(),
+          qrCode: {
+            data: passenger.qrCode, // QR code already stored in database
+            bookingId: `${passenger._id}`,
+            format: "base64"
+          }
+        }));
 
         return ResponseUtil.successResponse(
           res,
           STATUS_CODES.SUCCESS,
           {
-            passengers: existingPassengers,
+            passengers: passengersWithQR,
             type: "stripe",
             bookingsCount: existingPassengers.length,
             groupTicketSerial: groupTicketSerial,
-            qrCode: {
-              data: qrCodeBase64,
-              bookingId: qrCodeData.bookingId,
-              format: "base64"
-            },
             paymentIntentId: paymentIntentId
           },
           "Booking already confirmed"
@@ -303,6 +288,10 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
 
       // Generate QR code as base64 string for this passenger
       const qrCodeBase64 = await QRCodeUtils.generateQRCodeAsBase64(qrCodeData);
+
+      // Save QR code to passenger record in database
+      passenger.qrCode = qrCodeBase64;
+      await passenger.save();
 
       // Add QR code to passenger data
       passengersWithQR.push({

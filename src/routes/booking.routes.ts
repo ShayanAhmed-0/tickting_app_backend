@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { checkUserAuth } from '../middleware/check-user-auth.middleware';
 import { validateBody } from '../middleware/validation.middleware';
-import { bookSeats } from '../controllers/booking.controller';
+import { bookSeats, getBookingHistory, getLatestBooking } from '../controllers/booking.controller';
 import { confirmStripePayment } from '../controllers/stripe-payment.controller';
 import { bookSeatsSchema, confirmStripePaymentSchema } from '../validators/bookingValidators';
 
@@ -12,5 +12,8 @@ router.post("/book-seats", checkUserAuth, validateBody(bookSeatsSchema), bookSea
 
 // Confirm Stripe payment endpoint with validation
 router.post("/confirm-stripe-payment", checkUserAuth, validateBody(confirmStripePaymentSchema), confirmStripePayment);
+
+router.get("/history", checkUserAuth, getBookingHistory);
+router.get("/latest", checkUserAuth, getLatestBooking);
 
 export default router;
