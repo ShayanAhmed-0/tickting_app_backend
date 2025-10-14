@@ -325,6 +325,16 @@ export const getLatestBooking = async (req: CustomRequest, res: Response) => {
       return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "User not found");
     }
     const latestBooking = await PassengerModel.findOne({ user: userId }).sort({ createdAt: -1 });
+    if(latestBooking?.for === ForWho.FAMILY){
+      const getAllFamilyLatestBooking = await PassengerModel.find({groupTicketSerial:latestBooking.groupTicketSerial})
+      return ResponseUtil.successResponse(
+        res,
+        STATUS_CODES.SUCCESS,
+        { latestBooking:getAllFamilyLatestBooking },
+        "Latest booking including family tickets fetched successfully"
+      );
+
+    }
     return ResponseUtil.successResponse(
       res,
       STATUS_CODES.SUCCESS,
