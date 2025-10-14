@@ -22,6 +22,8 @@ export interface IBus extends Document {
   driver?: ObjectId;
   departureDay?: DaysEnums[];
   departureTime?: Date;
+  totalBookedSeats: number;
+  passengerOnBoarded: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -84,9 +86,11 @@ const BusSchema = new Schema<IBus>(
     nextMaintenanceDue: {type:Date, default:null},
     isActive: { type: Boolean, default: true },
     office: { type: Schema.Types.ObjectId, ref: "Office", default:null }, // assigned home office or depot
-    driver: { type: Schema.Types.ObjectId, ref: "User", default:null }, // driver user id
+    driver: { type: Schema.Types.ObjectId, ref: "Auth", default:null }, // driver user id
     departureDay: [{type:String, enum: DaysEnums, default:null}],
     departureTime: {type:Date, default:null},
+    totalBookedSeats: {type:Number, default:0},
+    passengerOnBoarded: {type:Number, default:0},
   },
   commonOptions
 );

@@ -22,6 +22,7 @@ import bookingRoutes from "./routes/booking.routes";
 import destinationRoutes from "./routes/destinations.routes";
 import routesRoutes from "./routes/routes.routes";
 import stripeWebhookRoutes from "./routes/stripe-webhook.routes";
+import driverRoutes from "./routes/driver.routes";
 
 dotenv.config();
 
@@ -57,6 +58,7 @@ app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/destination`, destinationRoutes);
 app.use(`${API_PREFIX}/routes`, routesRoutes);
 app.use(`${API_PREFIX}/booking`, bookingRoutes);
+app.use(`${API_PREFIX}/driver`, driverRoutes);  
 // misc routes
 app.use(`${API_PREFIX}/misc`, miscRoutes);
 // admin routes

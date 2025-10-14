@@ -7,97 +7,69 @@ import Bus from "../../models/bus.model";
 import { SeatLayoutType, SeatType, Seat, SeatStatus } from "../../models/common/types";
 import helper from "../../helper";
 
-// Function to generate the 54-seat layout based on the provided image
-const generateSeatLayout = () => {
+// Function to dynamically generate seat layout based on bus capacity
+// Standard layout: 4 seats per row (2 right + 2 left)
+// Seat numbering: 1-2 (right), 3-4 (left), 5-6 (right), 7-8 (left), etc.
+const generateSeatLayout = (capacity: number) => {
   const seats: Seat[] = [];
   
-  // Left section seats (28 seats)
-  const leftSectionSeats = [
-    { seatNumber: 3, row: 1, position: 'left' },
-    { seatNumber: 4, row: 1, position: 'left' },
-    { seatNumber: 7, row: 2, position: 'left' },
-    { seatNumber: 8, row: 2, position: 'left' },
-    { seatNumber: 11, row: 3, position: 'left' },
-    { seatNumber: 12, row: 3, position: 'left' },
-    { seatNumber: 15, row: 4, position: 'left' },
-    { seatNumber: 16, row: 4, position: 'left' },
-    { seatNumber: 19, row: 5, position: 'left' },
-    { seatNumber: 20, row: 5, position: 'left' },
-    { seatNumber: 23, row: 6, position: 'left' },
-    { seatNumber: 24, row: 6, position: 'left' },
-    { seatNumber: 27, row: 7, position: 'left' },
-    { seatNumber: 28, row: 7, position: 'left' },
-    { seatNumber: 31, row: 8, position: 'left' },
-    { seatNumber: 32, row: 8, position: 'left' },
-    { seatNumber: 35, row: 9, position: 'left' },
-    { seatNumber: 36, row: 9, position: 'left' },
-    { seatNumber: 39, row: 10, position: 'left' },
-    { seatNumber: 40, row: 10, position: 'left' },
-    { seatNumber: 43, row: 11, position: 'left' },
-    { seatNumber: 44, row: 11, position: 'left' },
-    { seatNumber: 47, row: 12, position: 'left' },
-    { seatNumber: 48, row: 12, position: 'left' },
-    { seatNumber: 51, row: 13, position: 'left' },
-    { seatNumber: 52, row: 13, position: 'left' },
-    // { seatNumber: 55, row: 14, position: 'left' },
-    // { seatNumber: 56, row: 14, position: 'left' }
-  ];
-
-  // Right section seats (26 seats)
-  const rightSectionSeats = [
-    { seatNumber: 1, row: 1, position: 'right' },
-    { seatNumber: 2, row: 1, position: 'right' },
-    { seatNumber: 5, row: 2, position: 'right' },
-    { seatNumber: 6, row: 2, position: 'right' },
-    { seatNumber: 9, row: 3, position: 'right' },
-    { seatNumber: 10, row: 3, position: 'right' },
-    { seatNumber: 13, row: 4, position: 'right' },
-    { seatNumber: 14, row: 4, position: 'right' },
-    { seatNumber: 17, row: 5, position: 'right' },
-    { seatNumber: 18, row: 5, position: 'right' },
-    { seatNumber: 21, row: 6, position: 'right' },
-    { seatNumber: 22, row: 6, position: 'right' },
-    { seatNumber: 25, row: 7, position: 'right' },
-    { seatNumber: 26, row: 7, position: 'right' },
-    { seatNumber: 29, row: 8, position: 'right' },
-    { seatNumber: 30, row: 8, position: 'right' },
-    { seatNumber: 33, row: 9, position: 'right' },
-    { seatNumber: 34, row: 9, position: 'right' },
-    { seatNumber: 37, row: 10, position: 'right' },
-    { seatNumber: 38, row: 10, position: 'right' },
-    { seatNumber: 41, row: 11, position: 'right' },
-    { seatNumber: 42, row: 11, position: 'right' },
-    { seatNumber: 45, row: 12, position: 'right' },
-    { seatNumber: 46, row: 12, position: 'right' },
-    { seatNumber: 49, row: 13, position: 'right' },
-    { seatNumber: 50, row: 13, position: 'right' },
-    { seatNumber: 53, row: 14, position: 'right' },
-    { seatNumber: 54, row: 14, position: 'right' }
-  ];
-
-  // Combine all seats
-  const allSeats = [...leftSectionSeats, ...rightSectionSeats];
-
-  // Generate seat objects
-  allSeats.forEach((seat, index) => {
-    seats.push({
-      seatLabel: seat.seatNumber.toString(),
-      seatIndex: index + 1,
-      type: SeatType.REGULAR,
-      isAvailable: true,
-      status: SeatStatus.AVAILABLE,
-      meta: {
-        seatNumber: seat.seatNumber,
-        row: seat.row,
-        position: seat.position,
-        section: seat.position === 'left' ? 'left' : 'right'
+  // Standard bus layout: 4 seats per row (2 left + 2 right)
+  // Pattern: seat 1-2 (right), seat 3-4 (left), seat 5-6 (right), seat 7-8 (left), etc.
+  const seatsPerRow = 4;
+  const totalRows = Math.ceil(capacity / seatsPerRow);
+  
+  let seatNumber = 1;
+  let seatIndex = 1;
+  
+  for (let row = 1; row <= totalRows; row++) {
+    // Generate 2 right seats for this row
+    for (let i = 0; i < 2; i++) {
+      if (seatNumber <= capacity) {
+        seats.push({
+          seatLabel: seatNumber.toString(),
+          seatIndex: seatIndex,
+          type: SeatType.REGULAR,
+          isAvailable: true,
+          status: SeatStatus.AVAILABLE,
+          meta: {
+            seatNumber: seatNumber,
+            row: row,
+            position: 'right',
+            section: 'right',
+            column: i + 1
+          }
+        });
+        seatNumber++;
+        seatIndex++;
       }
-    });
-  });
+    }
+    
+    // Generate 2 left seats for this row
+    for (let i = 0; i < 2; i++) {
+      if (seatNumber <= capacity) {
+        seats.push({
+          seatLabel: seatNumber.toString(),
+          seatIndex: seatIndex,
+          type: SeatType.REGULAR,
+          isAvailable: true,
+          status: SeatStatus.AVAILABLE,
+          meta: {
+            seatNumber: seatNumber,
+            row: row,
+            position: 'left',
+            section: 'left',
+            column: i + 1
+          }
+        });
+        seatNumber++;
+        seatIndex++;
+      }
+    }
+  }
 
   return {
     type: SeatLayoutType.STANDARD,
-    seats: seats
+    seats: seats.slice(0, capacity) // Ensure we only return exactly 'capacity' seats
   };
 };
 
@@ -110,7 +82,8 @@ export const createBus = async (req: Request, res: Response) => {
         isActive, 
         driverId, 
         departureTime, 
-        departureDays 
+        departureDays,
+        capacity
       } = req.body;
 
       // Check if bus with same code or serial number already exists
@@ -126,7 +99,7 @@ export const createBus = async (req: Request, res: Response) => {
       }
 
       // Generate seat layout
-      const seatLayout = generateSeatLayout();
+      const seatLayout = generateSeatLayout(capacity);
 
       // Create new bus
       const newBus = new Bus({

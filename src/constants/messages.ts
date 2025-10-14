@@ -60,3 +60,19 @@ export const ADMIN_CONSTANTS = {
   ROUTES_FETCHED: "Routes fetched successfully",
   ROUTE_FETCHED: "Route fetched successfully",
 }
+
+export const DRIVER_CONSTANTS = {
+  TICKET_VERIFIED: "Ticket verified successfully",
+  TICKET_NOT_FOUND: "Ticket not found",
+  TICKET_NOT_VALID: "Ticket is not valid",
+  TICKET_CONFIRMATION: "This ticket was alreday scanned once scanning it again will confirm your return ticket and will then mark the ticket as used",
+  TICKET_ALREADY_USED: "Ticket already used",
+  TICKET_NUMBER_REQUIRED: "Ticket number is required",
+  BUS_NOT_ASSIGNED_TO_DRIVER: "This bus is not assigned to you",
+  BAGGAGE_WEIGHT_REQUIRED: "Baggage weight is required and must be greater than 0",
+  BAGGAGE_AMOUNT_REQUIRED: "Baggage amount is required and must be greater than 0",
+  BAGGAGE_ALREADY_PURCHASED: "Extra baggage already purchased for this ticket",
+  BAGGAGE_CANNOT_ADD_CANCELLED: "Cannot add baggage to a cancelled ticket",
+  BAGGAGE_PAYMENT_INTENT_CREATED: "Payment intent created for extra baggage. Please complete the payment.",
+  PASSENGERS_COUNT_FETCHED: "Passengers count fetched successfully",
+}

@@ -3,6 +3,7 @@ import { DaysEnums } from "../../models/common/types";
 
 export const createBusSchema: ZodSchema<{
   code: string;
+  capacity: number;
   description?: string;
   serialNumber: string;
   isActive?: boolean;
@@ -23,7 +24,10 @@ export const createBusSchema: ZodSchema<{
     .min(1, "Serial number is required")
     .max(100, "Serial number must be less than 100 characters"),
   
- 
+  capacity: z.number()
+    .int("Capacity must be an integer")
+    .positive("Capacity must be a positive number"),
+
   isActive: z.boolean().optional(),
   
   driverId: z.string()
