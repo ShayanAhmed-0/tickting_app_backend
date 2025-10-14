@@ -207,7 +207,8 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
           $set: { 
             "seatLayout.seats.$.status": SeatStatus.BOOKED,
             "seatLayout.seats.$.isAvailable": false
-          } 
+          },
+          $inc: { totalBookedSeats: 1 }
         }
       );
 
@@ -280,12 +281,6 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
     );
   }
     
-    return ResponseUtil.successResponse(
-      res,
-      STATUS_CODES.SUCCESS,
-      {},
-      AUTH_CONSTANTS.BOOKING_SUCCESS
-    );
   } catch (err) {
     if (err instanceof CustomError)
       return ResponseUtil.errorResponse(res, err.statusCode, err.message);

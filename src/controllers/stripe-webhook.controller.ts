@@ -38,12 +38,22 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
   switch (event.type) {
     case 'payment_intent.succeeded':
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      await handlePaymentSuccess(paymentIntent);
+      // Check if this is extra baggage payment or regular booking
+      if (paymentIntent.metadata.type === 'extra_baggage') {
+        await handleExtraBaggagePaymentSuccess(paymentIntent);
+      } else {
+        await handlePaymentSuccess(paymentIntent);
+      }
       break;
 
     case 'payment_intent.payment_failed':
       const failedPayment = event.data.object as Stripe.PaymentIntent;
-      await handlePaymentFailure(failedPayment);
+      // Check if this is extra baggage payment or regular booking
+      if (failedPayment.metadata.type === 'extra_baggage') {
+        await handleExtraBaggagePaymentFailure(failedPayment);
+      } else {
+        await handlePaymentFailure(failedPayment);
+      }
       break;
 
     default:
@@ -122,6 +132,7 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
         From: (getRoutePrice as any)?.origin?.name || "Origin",
         To: (getRoutePrice as any)?.destination?.name || "Destination",
         DepartureDate: (getRoutePrice as any)?.departureTime || new Date(),
+        paymentIntentId: paymentIntent.id,
         ReturnDate: new Date(),
       });
       passengersDB.push(create);
@@ -138,7 +149,8 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
           $set: {
             "seatLayout.seats.$.status": SeatStatus.BOOKED,
             "seatLayout.seats.$.isAvailable": false
-          }
+          },
+          $inc: { totalBookedSeats: 1 }
         }
       );
 
@@ -251,5 +263,108 @@ async function handlePaymentFailure(paymentIntent: Stripe.PaymentIntent) {
 
   } catch (error) {
     console.error('Error handling payment failure:', error);
+  }
+}
+
+/**
+ * Handle successful extra baggage payment
+ * Updates passenger record with extra baggage information
+ */
+async function handleExtraBaggagePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
+  try {
+    console.log('Extra baggage payment succeeded:', paymentIntent.id);
+    
+    const metadata = paymentIntent.metadata;
+    const passengerId = metadata.passengerId;
+    const ticketNumber = metadata.ticketNumber;
+    const baggageWeight = metadata.baggageWeight;
+    const baggageAmount = metadata.baggageAmount;
+    const driverId = metadata.driverId;
+
+    if (!passengerId || !ticketNumber) {
+      console.error('Missing required metadata for extra baggage payment');
+      return;
+    }
+
+    // Update passenger record with extra baggage details
+    const updatedPassenger = await PassengerModel.findByIdAndUpdate(
+      passengerId,
+      {
+        additionalBaggage: `${baggageWeight}kg - $${baggageAmount}`,
+        extraBaggageIntentId: paymentIntent.id, 
+      },
+      { new: true }
+    );
+
+    if (!updatedPassenger) {
+      console.error('Passenger not found for extra baggage payment:', passengerId);
+      return;
+    }
+
+    // Create payment transaction record
+    await PaymentTransaction.create({
+      amount: paymentIntent.amount / 100,
+      currency: paymentIntent.currency,
+      gateway: PaymentGateway.STRIPE,
+      gatewayResponse: paymentIntent,
+      transactionId: paymentIntent.id,
+      status: TransactionStatus.SUCCEEDED,
+      createdBy: driverId
+    });
+
+    console.log('Extra baggage added successfully for ticket:', ticketNumber);
+    console.log('Passenger updated:', updatedPassenger._id);
+
+    // TODO: Send confirmation notification to passenger
+    // TODO: Notify driver that payment is completed
+
+  } catch (error) {
+    console.error('Error handling extra baggage payment success:', error);
+  }
+}
+
+/**
+ * Handle failed extra baggage payment
+ * Removes the payment intent ID from passenger record
+ */
+async function handleExtraBaggagePaymentFailure(paymentIntent: Stripe.PaymentIntent) {
+  try {
+    console.log('Extra baggage payment failed:', paymentIntent.id);
+    
+    const metadata = paymentIntent.metadata;
+    const passengerId = metadata.passengerId;
+    const ticketNumber = metadata.ticketNumber;
+    const driverId = metadata.driverId;
+
+    if (!passengerId) {
+      console.error('Missing passenger ID for extra baggage payment failure');
+      return;
+    }
+
+    // Remove the payment intent ID from passenger record so they can try again
+    await PassengerModel.findByIdAndUpdate(
+      passengerId,
+      {
+        extraBaggageIntentId: null
+      }
+    );
+
+    // Create payment transaction record for failed payment
+    await PaymentTransaction.create({
+      amount: paymentIntent.amount / 100,
+      currency: paymentIntent.currency,
+      gateway: PaymentGateway.STRIPE,
+      gatewayResponse: paymentIntent,
+      transactionId: paymentIntent.id,
+      status: TransactionStatus.FAILED,
+      createdBy: driverId
+    });
+
+    console.log('Extra baggage payment failed for ticket:', ticketNumber);
+
+    // TODO: Send notification about payment failure
+
+  } catch (error) {
+    console.error('Error handling extra baggage payment failure:', error);
   }
 }
