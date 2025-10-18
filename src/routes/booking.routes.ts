@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { checkUserAuth } from '../middleware/check-user-auth.middleware';
 import { validateBody } from '../middleware/validation.middleware';
-import { bookSeats, getBookingHistory, getLatestBooking } from '../controllers/booking.controller';
+import { bookSeats, getBookingHistory, getLatestBooking, printTicket } from '../controllers/booking.controller';
 import { confirmStripePayment } from '../controllers/stripe-payment.controller';
 import { bookSeatsSchema, confirmStripePaymentSchema } from '../validators/bookingValidators';
 
@@ -15,5 +15,6 @@ router.post("/confirm-stripe-payment", checkUserAuth, validateBody(confirmStripe
 
 router.get("/history", checkUserAuth, getBookingHistory);
 router.get("/latest", checkUserAuth, getLatestBooking);
+router.get("/print-ticket/:ticketNumber", printTicket);
 
 export default router;
