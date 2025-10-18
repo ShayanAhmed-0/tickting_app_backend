@@ -16,6 +16,7 @@ import AuthModel from "../models/auth.model";
 import { redis, RedisKeys } from "../config/redis";
 import { Booking } from "../models";
 import helper from "../helper";
+import { TicketPDFGenerator, TicketPDFData } from "../utils/PDF/ticketPDFGenerator";
 
 export const bookSeats = async (req: CustomRequest, res: Response) => {
   try {
@@ -341,6 +342,100 @@ export const getLatestBooking = async (req: CustomRequest, res: Response) => {
       { latestBooking },
       "Latest booking fetched successfully"
     );
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+export const printTicket = async (req: CustomRequest, res: Response) => {
+  try {
+    const userId = req.authId;
+    const ticketNumber = req.params.ticketNumber;
+    
+    if(!ticketNumber) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Ticket ID not found");
+    }
+
+    // Find the ticket
+    const ticket = await PassengerModel.findOne({ ticketNumber: ticketNumber })
+      .populate('user')
+      .populate('busId');
+    
+    if(!ticket) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Ticket not found");
+    }
+
+    // Verify user has access to this ticket
+    if(ticket.user.toString() !== userId) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.FORBIDDEN, "Access denied to this ticket");
+    }
+
+    let ticketsToPrint = [ticket];
+
+    // If it's a family booking, get all related tickets
+    if(ticket.for === ForWho.FAMILY && ticket.groupTicketSerial) {
+      const familyTickets = await PassengerModel.find({
+        groupTicketSerial: ticket.groupTicketSerial
+      }).populate('user').populate('busId');
+      
+      ticketsToPrint = familyTickets;
+    }
+
+    // Get route information - we need to find the route by busId
+    const route = await RouteModel.findOne({ bus: ticket.busId })
+      .populate('origin')
+      .populate('destination');
+
+    if(!route) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Route information not found");
+    }
+
+    // Generate PDF tickets
+    const pdfGenerator = new TicketPDFGenerator();
+    
+    const ticketsData: TicketPDFData[] = ticketsToPrint.map(ticketData => ({
+      passenger: ticketData,
+      routeInfo: {
+        from: (route as any).origin?.name || ticketData.From,
+        to: (route as any).destination?.name || ticketData.To,
+        departureDate: ticketData.DepartureDate,
+        returnDate: ticketData.ReturnDate || undefined
+      },
+      busInfo: {
+        busNumber: (ticketData.busId as any)?.busNumber || 'N/A',
+        driverName: (ticketData.busId as any)?.driverName || undefined
+      },
+      companyInfo: {
+        name: "Los Mismos Travels",
+        // address: "123 Main Street, City, State 12345",
+        // phone: "+1 (555) 123-4567",
+        // email: "info@yourbuscompany.com"
+      }
+    }));
+
+    let pdfBuffer: Buffer;
+    
+    if(ticketsData.length === 1) {
+      // Single ticket
+      pdfBuffer = await pdfGenerator.generateTicket(ticketsData[0]);
+    } else {
+      // Multiple tickets (family booking)
+      pdfBuffer = await pdfGenerator.generateMultipleTickets(ticketsData);
+    }
+
+    // Set response headers for PDF download
+    const filename = ticketsData.length === 1 
+      ? `ticket-${ticketNumber}.pdf` 
+      : `tickets-${ticket.groupTicketSerial}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send the PDF
+    res.send(pdfBuffer);
+
   } catch (err) {
     if (err instanceof CustomError)
       return ResponseUtil.errorResponse(res, err.statusCode, err.message);

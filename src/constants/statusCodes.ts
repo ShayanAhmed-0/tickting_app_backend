@@ -4,4 +4,5 @@ export const STATUS_CODES = {
   BAD_REQUEST: 400,
   CONFLICT: 409,
   NOT_FOUND: 404,
+  FORBIDDEN: 403,
 };
