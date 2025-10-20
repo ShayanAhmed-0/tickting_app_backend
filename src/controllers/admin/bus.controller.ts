@@ -150,10 +150,55 @@ export const getBuses = async (req: Request, res: Response) => {
       page: Number(page),
       limit: Number(limit),
       sort: { createdAt: -1 } as Record<string, 1 | -1>,
-      populate: [{ path: "driver", select: "firstName lastName" }],
+      populate: [{ path: "driver", select: "profile", populate: { path: "profile", select: "firstName secondName lastName" } }],
     };
     const buses = await helper.PaginateHelper.customPaginate("buses", Bus, query, options);
     return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { buses }, ADMIN_CONSTANTS.BUS_FETCHED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+}
+
+export const updateBus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { code, description, serialNumber, isActive, driverId, departureTime, departureDays, capacity } = req.body;
+    
+    // Build update object with only provided fields
+    const updateData: any = {};
+    if (code !== undefined) updateData.code = code;
+    if (description !== undefined) updateData.description = description;
+    if (serialNumber !== undefined) updateData.serialNumber = serialNumber;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (driverId !== undefined) updateData.driver = driverId; // Fix: use 'driver' field name
+    if (departureTime !== undefined) updateData.departureTime = departureTime;
+    if (departureDays !== undefined) updateData.departureDay = departureDays; // Fix: use 'departureDay' field name
+    if (capacity !== undefined) updateData.capacity = capacity;
+    
+    const bus = await Bus.findByIdAndUpdate(id, updateData, { 
+      new: true,
+      populate: [{ path: "driver", select: "firstName lastName" }]
+    });
+    
+    if (!bus) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.BUS_NOT_FOUND);
+    }
+    
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { bus }, ADMIN_CONSTANTS.BUS_UPDATED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+}
+
+export const deleteBus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const bus = await Bus.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { bus }, ADMIN_CONSTANTS.BUS_DELETED);
   } catch (err) {
     if (err instanceof CustomError)
       return ResponseUtil.errorResponse(res, err.statusCode, err.message);

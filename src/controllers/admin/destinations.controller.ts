@@ -98,3 +98,42 @@ export const getDestinations = async (req: Request, res: Response) => {
     ResponseUtil.handleError(res, err);
   }
 };
+
+export const updateDestination = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, description, priceToDFW, priceFromDFW, priceRoundTrip, salesOffice, MinutesOfDifference, TerminalOfReference, isTerminal, isActive } = req.body;
+    const updateData: any = {};
+    if (name) updateData.name = name;
+    if (description) updateData.description = description;
+    if (priceToDFW) updateData.priceToDFW = priceToDFW;
+    if (priceFromDFW) updateData.priceFromDFW = priceFromDFW;
+    if (priceRoundTrip) updateData.priceRoundTrip = priceRoundTrip;
+    if (salesOffice) updateData.salesOffice = salesOffice;
+    if (MinutesOfDifference) updateData.MinutesOfDifference = MinutesOfDifference;
+    if (TerminalOfReference) updateData.TerminalOfReference = TerminalOfReference;
+    if (isTerminal) updateData.isTerminal = isTerminal;
+    if (isActive) updateData.isActive = isActive;
+    const destination = await Destination.findByIdAndUpdate(id, updateData, { new: true });
+    if (!destination) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.DESTINATION_NOT_FOUND);
+    }
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { destination }, ADMIN_CONSTANTS.DESTINATION_UPDATED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const deleteDestination = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const destination = await Destination.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { destination }, ADMIN_CONSTANTS.DESTINATION_DELETED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};

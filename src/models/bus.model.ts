@@ -24,6 +24,7 @@ export interface IBus extends Document {
   departureTime?: Date;
   totalBookedSeats: number;
   passengerOnBoarded: number;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -84,6 +85,7 @@ const BusSchema = new Schema<IBus>(
     amenities: [{type:String, default:null}], // e.g. ['wifi','restroom','usb']
     lastMaintenanceAt: {type:Date, default:null},
     nextMaintenanceDue: {type:Date, default:null},
+    isDeleted: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     office: { type: Schema.Types.ObjectId, ref: "Office", default:null }, // assigned home office or depot
     driver: { type: Schema.Types.ObjectId, ref: "Auth", default:null }, // driver user id

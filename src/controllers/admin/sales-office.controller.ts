@@ -56,11 +56,41 @@ export const getOffices = async (req: Request, res: Response) => {
     const options = {
       page: Number(page),
       limit: Number(limit),
-      sort: { createdAt: -1 } as Record<string, 1 | -1>,
-      populate: [{ path: "office", select: "name description" }],
+      sort: { createdAt: -1 } as Record<string, 1 | -1>
     };
     const offices = await helper.PaginateHelper.customPaginate("offices", OfficeModel, query, options);
     return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { offices }, ADMIN_CONSTANTS.OFFICE_FETCHED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+}
+
+export const updateSalesOffice = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+    const office = await OfficeModel.findByIdAndUpdate(id, { name, description }, { new: true });
+    if (!office) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.OFFICE_NOT_FOUND);
+    }
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { office }, ADMIN_CONSTANTS.OFFICE_UPDATED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+}
+
+export const deleteSalesOffice = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const office = await OfficeModel.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
+    if (!office) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.OFFICE_NOT_FOUND);
+    }
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { office }, ADMIN_CONSTANTS.OFFICE_DELETED);
   } catch (err) {
     if (err instanceof CustomError)
       return ResponseUtil.errorResponse(res, err.statusCode, err.message);

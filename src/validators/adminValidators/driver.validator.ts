@@ -19,3 +19,19 @@ export const createDriverSchema: ZodSchema<{
       .min(8, "Password must be at least 8 characters long")
       .max(100)
   });
+
+export const updateDriverSchema: ZodSchema<{
+    firstName?: string;
+    secondName?: string;
+    lastName?: string;
+    driverLicenseId?: string;
+    email?: string;
+    password?: string;
+  }> = z.object({
+    firstName: z.string().max(255).optional(),
+    secondName: z.string().max(255).optional(),
+    lastName: z.string().max(255).optional(),
+    driverLicenseId: z.string().max(255).optional(),
+    email: z.string().optional(),
+    password: z.string().min(8, "Password must be at least 8 characters long").max(100).optional(),
+  });

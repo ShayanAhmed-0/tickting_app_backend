@@ -77,13 +77,26 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
     const userId = metadata.userId;
     const routeId = metadata.routeId;
     const busId = metadata.busId;
-    const passengersData = metadata.passengers ? JSON.parse(metadata.passengers) : [];
-    const seatsData = metadata.seats ? JSON.parse(metadata.seats) : [];
+    const passengersRedisKey = metadata.passengersRedisKey;
+    const additionalBaggage = metadata.additionalBaggage ? parseFloat(metadata.additionalBaggage) : 0;
+    const tripType = metadata.tripType || "one_way";
+    const returnRouteId = metadata.returnRouteId;
+    const returnBusId = metadata.returnBusId;
+    const roundTripDate = metadata.roundTripDate;
 
     if (!userId || !routeId || !busId) {
       console.error('Missing required metadata in payment intent');
       return;
     }
+
+    // Get passengers data from Redis
+    const redis = require('../config/redis').redis;
+    const passengersDataStr = await redis.get(passengersRedisKey);
+    if (!passengersDataStr) {
+      console.error('Passengers data not found in Redis');
+      return;
+    }
+    const passengersData = JSON.parse(passengersDataStr);
 
     // Get route and bus information
     const getRoutePrice = await RouteModel.findById(routeId).populate('origin destination');
@@ -92,6 +105,19 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
     if (!getBus) {
       console.error('Bus not found:', busId);
       return;
+    }
+
+    // For round trip, get return route information
+    let returnRoute = null;
+    let returnBus = null;
+    if(tripType === "round_trip" && returnRouteId && returnBusId) {
+      returnRoute = await RouteModel.findById(returnRouteId).populate('origin destination');
+      returnBus = await BusModel.findById(returnBusId);
+      
+      if(!returnRoute || !returnBus) {
+        console.error('Return route or bus not found for round trip');
+        return;
+      }
     }
 
     // Determine booking type
@@ -103,22 +129,23 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       forType = "FAMILY";
       groupTicketSerial = `TKT-${Date.now()}-${passengersData.length}`;
     }
+    if(tripType === "round_trip" && returnRoute && returnBus) {
+      groupTicketSerial = `TKT-${Date.now()}-${passengersData.length}-RT`;
+    }
 
-    // Create passenger records
-    for (let i = 0; i < seatsData.length; i++) {
-      const seat = seatsData[i];
-      const passenger = passengersData[i] || {
-        fullName: "Passenger " + (i + 1),
-        gender: "other",
-        dob: new Date(),
-        contactNumber: "",
-        DocumentId: ""
-      };
+    // Get seat labels from passengers data
+    const seatLabels = passengersData.map((p: any) => p.seatLabel);
+    const getSeats = getBus.seatLayout.seats;
+    const getUserSeats = getSeats.filter((seat: any) => seatLabels.includes(seat.seatLabel));
+
+    // Create outbound trip passenger records
+    for (let i = 0; i < passengersData.length; i++) {
+      const passenger = passengersData[i];
 
       const create = await PassengerModel.create({
-        profile: userId,
+        user: userId,
         bookedBy: "USER",
-        seatLabel: seat.seatLabel,
+        seatLabel: passenger.seatLabel,
         busId: getBus._id,
         for: forType,
         ticketNumber: `TKT-${Date.now()}-${i}`,
@@ -128,18 +155,64 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
         dob: passenger.dob,
         contactNumber: passenger.contactNumber,
         DocumentId: passenger.DocumentId,
-        type: "ONE_WAY",
+        type: tripType,
         From: (getRoutePrice as any)?.origin?.name || "Origin",
         To: (getRoutePrice as any)?.destination?.name || "Destination",
         DepartureDate: (getRoutePrice as any)?.departureTime || new Date(),
         paymentIntentId: paymentIntent.id,
-        ReturnDate: new Date(),
+        ReturnDate: tripType === "round_trip" ? new Date(roundTripDate) : null,
+        additionalBaggage: additionalBaggage,
       });
       passengersDB.push(create);
     }
 
-    // Update bus seat status to BOOKED
-    for (const seat of seatsData) {
+    // Create return trip passenger records for round trip
+    if(tripType === "round_trip" && returnRoute && returnBus) {
+      console.log('Creating return trip tickets in webhook for round trip booking');
+      console.log('Return route:', returnRoute._id);
+      console.log('Return bus:', returnBus._id);
+      console.log('Passengers count:', passengersData.length);
+      
+      const returnSeats = returnBus.seatLayout.seats.filter((seat: any) => seatLabels.includes(seat.seatLabel));
+      
+      for (let i = 0; i < passengersData.length; i++) {
+        const passenger = passengersData[i];
+        
+        const returnPassenger = await PassengerModel.create({
+          user: userId,
+          bookedBy: "USER",
+          seatLabel: passenger.seatLabel,
+          busId: returnBus._id,
+          for: forType,
+          ticketNumber: `TKT-${Date.now()}-${i}-RT`,
+          groupTicketSerial: groupTicketSerial,
+          fullName: passenger.fullName,
+          gender: passenger.gender,
+          dob: passenger.dob,
+          contactNumber: passenger.contactNumber,
+          DocumentId: passenger.DocumentId,
+          type: tripType,
+          From: (returnRoute as any)?.origin?.name || "Origin",
+          To: (returnRoute as any)?.destination?.name || "Destination",
+          DepartureDate: new Date(roundTripDate),
+          paymentIntentId: paymentIntent.id,
+          ReturnDate: null, // Return trip doesn't have a return date
+          additionalBaggage: additionalBaggage,
+        });
+        console.log('Created return ticket in webhook:', returnPassenger.ticketNumber);
+        passengersDB.push(returnPassenger);
+      }
+    } else {
+      console.log('Round trip conditions not met in webhook:');
+      console.log('tripType === "round_trip":', tripType === "round_trip");
+      console.log('returnRoute exists:', !!returnRoute);
+      console.log('returnBus exists:', !!returnBus);
+    }
+
+    // Update outbound bus seat status to BOOKED
+    for (const seat of getUserSeats) {
+      if (!seat.seatLabel) continue;
+      
       await BusModel.updateOne(
         {
           _id: getBus._id,
@@ -164,25 +237,70 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       });
     }
 
-    // Create QR code data structure
-    const qrCodeData = QRCodeUtils.createBookingQRData({
-      userId: userId,
-      routeId: routeId,
-      busId: getBus._id?.toString() || busId,
-      passengers: passengersDB,
-      routeInfo: {
-        from: (getRoutePrice as any)?.origin?.name || "Origin",
-        to: (getRoutePrice as any)?.destination?.name || "Destination",
-        departureDate: (getRoutePrice as any)?.departureTime || new Date(),
-        returnDate: new Date()
-      },
-      paymentType: "stripe",
-      totalPrice: paymentIntent.amount / 100, // Convert from cents
-      groupTicketSerial: groupTicketSerial || undefined
-    });
+    // Update return trip bus seat status to BOOKED for round trip
+    if(tripType === "round_trip" && returnBus) {
+      const returnSeats = returnBus.seatLayout.seats.filter((seat: any) => seatLabels.includes(seat.seatLabel));
+      
+      for (const seat of returnSeats) {
+        if (!seat.seatLabel) continue;
+        
+        await BusModel.updateOne(
+          {
+            _id: returnBus._id,
+            "seatLayout.seats.seatLabel": seat.seatLabel
+          },
+          {
+            $set: {
+              "seatLayout.seats.$.status": SeatStatus.BOOKED,
+              "seatLayout.seats.$.isAvailable": false
+            },
+            $inc: { totalBookedSeats: 1 }
+          }
+        );
 
-    // Generate QR code as base64 string
-    const qrCodeBase64 = await QRCodeUtils.generateQRCodeAsBase64(qrCodeData);
+        // Emit seat status change for return route
+        io.to(`route:${returnRouteId}`).emit('seat:status:changed', {
+          routeId: returnRouteId,
+          seatLabel: seat.seatLabel,
+          status: SeatStatus.BOOKED,
+          userId: userId,
+          busId: returnBusId
+        });
+      }
+    }
+
+    // Generate individual QR codes for each passenger/seat
+    for (const passenger of passengersDB) {
+      // Determine if this is a return trip passenger
+      const isReturnTrip = passenger.ticketNumber?.includes('-RT');
+      const currentRoute = isReturnTrip ? returnRoute : getRoutePrice;
+      const currentBus = isReturnTrip ? returnBus : getBus;
+      
+      // Create QR code data for individual passenger
+      const qrCodeData = QRCodeUtils.createBookingQRData({
+        userId: userId,
+        routeId: isReturnTrip ? returnRouteId : routeId,
+        busId: currentBus?._id?.toString() || (isReturnTrip ? returnBusId : busId),
+        passengers: [passenger], // Single passenger
+        routeInfo: {
+          from: (currentRoute as any)?.origin?.name || "Origin",
+          to: (currentRoute as any)?.destination?.name || "Destination",
+          departureDate: isReturnTrip ? new Date(roundTripDate) : ((getRoutePrice as any)?.departureTime || new Date()),
+          returnDate: tripType === "round_trip" ? new Date(roundTripDate) : null,
+          isReturnTrip: isReturnTrip
+        },
+        paymentType: "stripe",
+        totalPrice: paymentIntent.amount / 100, // Convert from cents
+        groupTicketSerial: groupTicketSerial || undefined
+      });
+
+      // Generate QR code as base64 string for this passenger
+      const qrCodeBase64 = await QRCodeUtils.generateQRCodeAsBase64(qrCodeData);
+
+      // Save QR code to passenger record in database
+      passenger.qrCode = qrCodeBase64;
+      await passenger.save();
+    }
 
     // Create payment transaction record
     await PaymentTransaction.create({
@@ -195,9 +313,12 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       createdBy: userId
     });
 
+    // Clean up Redis data
+    await redis.del(passengersRedisKey);
+
     console.log('Booking completed successfully for payment:', paymentIntent.id);
-    console.log('QR Code generated:', qrCodeData.bookingId);
     console.log('Passengers created:', passengersDB.length);
+    console.log('Trip type:', tripType);
 
     // TODO: Send confirmation email/notification to user with QR code
     // You can implement email sending here with the qrCodeBase64
@@ -280,6 +401,9 @@ async function handleExtraBaggagePaymentSuccess(paymentIntent: Stripe.PaymentInt
     const baggageWeight = metadata.baggageWeight;
     const baggageAmount = metadata.baggageAmount;
     const driverId = metadata.driverId;
+    const tripType = metadata.tripType || "one_way";
+    const isReturnTrip = metadata.isReturnTrip === "true";
+    const groupTicketSerial = metadata.groupTicketSerial;
 
     if (!passengerId || !ticketNumber) {
       console.error('Missing required metadata for extra baggage payment');
@@ -290,7 +414,7 @@ async function handleExtraBaggagePaymentSuccess(paymentIntent: Stripe.PaymentInt
     const updatedPassenger = await PassengerModel.findByIdAndUpdate(
       passengerId,
       {
-        additionalBaggage: `${baggageWeight}kg - $${baggageAmount}`,
+        additionalBaggage: parseFloat(baggageAmount)*4.6,
         extraBaggageIntentId: paymentIntent.id, 
       },
       { new: true }
@@ -299,6 +423,29 @@ async function handleExtraBaggagePaymentSuccess(paymentIntent: Stripe.PaymentInt
     if (!updatedPassenger) {
       console.error('Passenger not found for extra baggage payment:', passengerId);
       return;
+    }
+
+    // For round trip, also update the other ticket in the pair
+    if (tripType === "round_trip" && groupTicketSerial) {
+      const otherTicketNumber = isReturnTrip 
+        ? ticketNumber.replace('-RT', '') 
+        : ticketNumber + '-RT';
+      
+      const otherTicket = await PassengerModel.findOne({ 
+        ticketNumber: otherTicketNumber,
+        groupTicketSerial: groupTicketSerial 
+      });
+
+      if (otherTicket) {
+        await PassengerModel.findByIdAndUpdate(
+          otherTicket._id,
+          {
+            additionalBaggage: parseFloat(baggageAmount)*4.6,
+            extraBaggageIntentId: paymentIntent.id, 
+          }
+        );
+        console.log('Updated both tickets in round trip for extra baggage');
+      }
     }
 
     // Create payment transaction record
@@ -313,6 +460,8 @@ async function handleExtraBaggagePaymentSuccess(paymentIntent: Stripe.PaymentInt
     });
 
     console.log('Extra baggage added successfully for ticket:', ticketNumber);
+    console.log('Trip type:', tripType);
+    console.log('Is return trip:', isReturnTrip);
     console.log('Passenger updated:', updatedPassenger._id);
 
     // TODO: Send confirmation notification to passenger
