@@ -48,7 +48,7 @@ export const getDrivers = async (req: Request, res: Response) => {
         limit: Number(limit),
         sort: { createdAt: -1 } as Record<string, 1 | -1>,
         select: "-password",
-        populate: [{ path: "profile", select: "firstName secondName lastName" }]
+        populate: [{ path: "profile", select: "firstName secondName lastName documents" }]
       };
       const drivers = await helper.PaginateHelper.customPaginate("drivers", AuthModel as any, query, options);
         return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { drivers }, ADMIN_CONSTANTS.DRIVERS_FETCHED);
@@ -57,4 +57,79 @@ export const getDrivers = async (req: Request, res: Response) => {
             return ResponseUtil.errorResponse(res, err.statusCode, err.message);
         ResponseUtil.handleError(res, err);
     }
+}
+
+export const updateDriver = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { firstName, secondName, lastName, driverLicenseId, email, password } = req.body;
+    const driver = await AuthModel.findById(id).populate("profile");
+    if (!driver) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.DRIVER_NOT_FOUND);
+    }
+    if (email && email !== driver.email) {
+      const emailExist = await AuthModel.findOne({ email });
+      if (emailExist) {
+        throw new CustomError(STATUS_CODES.BAD_REQUEST, AUTH_CONSTANTS.USER_ALREADY_EXISTS);
+      }
+    }
+
+    // Update Auth model fields
+    const authUpdateData: any = {};
+    if (email) authUpdateData.email = email;
+    if (password) {
+      const salt = await bcrypt.genSalt(Number(SALT_ROUNDS));
+      const hashPassword = await bcrypt.hash(password, salt);
+      authUpdateData.password = hashPassword;
+    }
+
+    // Update Profile model fields
+    const profileUpdateData: any = {};
+    if (firstName) profileUpdateData.firstName = firstName;
+    if (secondName) profileUpdateData.secondName = secondName;
+    if (lastName) profileUpdateData.lastName = lastName;
+    if (driverLicenseId) profileUpdateData["documents.driverLicenseId"] = driverLicenseId;
+
+    // Update both models
+    if (Object.keys(authUpdateData).length > 0) {
+      await AuthModel.findByIdAndUpdate(id, authUpdateData);
+    }
+    
+    if (Object.keys(profileUpdateData).length > 0 && driver.profile) {
+      await ProfileModel.findByIdAndUpdate((driver.profile as any)._id, profileUpdateData);
+    }
+
+    // Fetch updated driver with populated profile
+    const updatedDriver = await AuthModel.findById(id).populate("profile");
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { driver: updatedDriver }, ADMIN_CONSTANTS.DRIVER_UPDATED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+}
+
+export const deleteDriver = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const driver = await AuthModel.findById(id).populate("profile");
+    if (!driver) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.DRIVER_NOT_FOUND);
+    }
+    
+    if (driver.profile) {
+      const updatedProfile = await ProfileModel.findByIdAndUpdate(
+        (driver.profile as any)._id, 
+        { isDeleted: true }, 
+        { new: true }
+      );
+      return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { driver: updatedProfile }, ADMIN_CONSTANTS.DRIVER_DELETED);
+    }
+    
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { driver: null }, ADMIN_CONSTANTS.DRIVER_DELETED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
 }

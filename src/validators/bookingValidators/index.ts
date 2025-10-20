@@ -35,6 +35,8 @@ export const bookSeatsSchema: ZodSchema<{
   busId: string;
   paymentType: string;
   tripType: string;
+  additionalBaggage?: string;
+  roundTripDate?: string;
   passengers: Array<{
     seatLabel: string;
     fullName: string;
@@ -56,6 +58,10 @@ export const bookSeatsSchema: ZodSchema<{
   tripType: z.enum([TripType.ONE_WAY, TripType.ROUND_TRIP], {
     errorMap: () => ({ message: "Trip type must be either 'one_way' or 'round_trip'" })
   }),
+  roundTripDate: z.string()
+    .optional(),
+  additionalBaggage: z.string()
+    .optional(),
   passengers: z.array(passengerSchema)
     .min(1, "At least one passenger is required")
     .max(10, "Maximum 10 passengers allowed per booking")

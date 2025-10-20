@@ -516,3 +516,42 @@ export const searchRoutes = async (req: Request, res: Response) => {
     ResponseUtil.handleError(res, err);
   }
 };
+
+export const updateRoute = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, origin, destination, bus, dayTime, intermediateStops, isActive } = req.body;
+    const updateData: any = {};
+    if (name) updateData.name = name;
+    if (origin) updateData.origin = origin;
+    if (destination) updateData.destination = destination;
+    if (bus) updateData.bus = bus;
+    if (dayTime) updateData.dayTime = dayTime;
+    if (intermediateStops) updateData.intermediateStops = intermediateStops;
+    if (isActive) updateData.isActive = isActive;
+    const route = await RouteModel.findByIdAndUpdate(id, updateData, { new: true });
+    if (!route) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.ROUTE_NOT_FOUND);
+    }
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { route }, ADMIN_CONSTANTS.ROUTE_UPDATED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const deleteRoute = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const route = await RouteModel.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
+    if (!route) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.ROUTE_NOT_FOUND);
+    }
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { route }, ADMIN_CONSTANTS.ROUTE_DELETED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};

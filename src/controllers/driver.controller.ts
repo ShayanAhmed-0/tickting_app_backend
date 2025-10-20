@@ -15,7 +15,12 @@ export const verifyTicket = async (req: CustomRequest, res: Response) => {
         if(!ticketNumber){
             throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.TICKET_NUMBER_REQUIRED);
         }
+        
         const getPassenger = await PassengerModel.findOne({ ticketNumber }).select("-qrCode");
+        if (!getPassenger) {
+            throw new CustomError(STATUS_CODES.NOT_FOUND, DRIVER_CONSTANTS.TICKET_NOT_FOUND);
+        }
+
         const getBus = await BusModel.findById(getPassenger?.busId);
         if(!getBus){
             throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.BUS_NOT_FOUND);
@@ -23,38 +28,84 @@ export const verifyTicket = async (req: CustomRequest, res: Response) => {
         if(getBus.driver?.toString() !== req.authId){
             throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.BUS_NOT_ASSIGNED_TO_DRIVER);
         }
-        if (!getPassenger) {
-            throw new CustomError(STATUS_CODES.NOT_FOUND, DRIVER_CONSTANTS.TICKET_NOT_FOUND);
-        }
 
-        if (getPassenger.scannedForTicketCount > 2 && getPassenger.type === TripType.ROUND_TRIP) {
-            throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.TICKET_ALREADY_USED);
-        }
+        // Check if ticket is already used
         if (getPassenger.status === TicketStatus.USED) {
             throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.TICKET_ALREADY_USED);
         }
-        if (getPassenger.scannedForTicketCount === 1 && getPassenger.type === TripType.ROUND_TRIP) {
-            const updatedPassenger = await PassengerModel.findByIdAndUpdate(getPassenger._id, { $inc: { scannedForTicketCount: 1 } });
-            return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { updatedPassenger }, DRIVER_CONSTANTS.TICKET_CONFIRMATION);
-        }
+
+        // Check if ticket is valid
         if (!getPassenger.isValid) {
             throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.TICKET_NOT_VALID);
         }
-        let validity = true;
-        if (getPassenger.type === TripType.ROUND_TRIP && getPassenger.scannedForTicketCount < 2) {
-            validity = false;
-        }
-        if (getPassenger.type === TripType.ONE_WAY && getPassenger.scannedForTicketCount < 1) {
-            validity = false;
+
+        // Check if ticket is cancelled
+        if (getPassenger.isCancelled) {
+            throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.TICKET_NOT_VALID);
         }
 
+        // For round trip tickets, check if this is the return trip ticket
+        const isReturnTrip = getPassenger.ticketNumber?.includes('-RT');
+        
+        // If this is a round trip booking, check if the corresponding outbound/return ticket exists and is used
+        if (getPassenger.type === TripType.ROUND_TRIP) {
+            const groupTicketSerial = getPassenger.groupTicketSerial;
+            if (groupTicketSerial) {
+                // Find the other ticket in the round trip pair
+                const otherTicketNumber = isReturnTrip 
+                    ? getPassenger.ticketNumber.replace('-RT', '') 
+                    : getPassenger.ticketNumber + '-RT';
+                
+                const otherTicket = await PassengerModel.findOne({ 
+                    ticketNumber: otherTicketNumber,
+                    groupTicketSerial: groupTicketSerial 
+                });
+
+                if (otherTicket) {
+                    // If this is the return trip ticket, check if outbound ticket is used
+                    if (isReturnTrip && otherTicket.status !== TicketStatus.USED) {
+                        throw new CustomError(STATUS_CODES.BAD_REQUEST, "Outbound trip ticket must be used before return trip ticket");
+                    }
+                    // If this is the outbound trip ticket, check if return ticket exists and is valid
+                    if (!isReturnTrip && otherTicket.status === TicketStatus.USED) {
+                        // Both tickets are used, this is a complete round trip
+                        const updatedPassenger = await PassengerModel.findByIdAndUpdate(getPassenger._id, { 
+                            status: TicketStatus.USED, 
+                            alreadyScanned: true, 
+                            scannedForTicketCount: 1, 
+                            checkedInBy: req.authId, 
+                            isValid: true 
+                        });
+                        return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { 
+                            updatedPassenger,
+                            tripType: 'round_trip',
+                            isReturnTrip: isReturnTrip,
+                            message: isReturnTrip ? 'Return trip ticket verified' : 'Outbound trip ticket verified'
+                        }, DRIVER_CONSTANTS.TICKET_VERIFIED);
+                    }
+                }
+            }
+        }
+
+        // For one-way trips or first part of round trip
         if(getPassenger.scannedForTicketCount === 0){
             await BusModel.findByIdAndUpdate(getBus._id, { $inc: { passengerOnBoarded: 1 } });
         }
-        const updatedPassenger = await PassengerModel.findByIdAndUpdate(getPassenger._id, { status: TicketStatus.USED, alreadyScanned: true, scannedForTicketCount: getPassenger.scannedForTicketCount + 1, scannedForBaggageCount: getPassenger.scannedForBaggageCount + 1, checkedInBy: req.authId, isValid: validity });
+        
+        const updatedPassenger = await PassengerModel.findByIdAndUpdate(getPassenger._id, { 
+            status: TicketStatus.USED, 
+            alreadyScanned: true, 
+            scannedForTicketCount: getPassenger.scannedForTicketCount + 1, 
+            scannedForBaggageCount: getPassenger.scannedForBaggageCount + 1, 
+            checkedInBy: req.authId, 
+            isValid: true 
+        });
 
-      
-        return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { updatedPassenger }, DRIVER_CONSTANTS.TICKET_VERIFIED);
+        return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { 
+            updatedPassenger,
+            tripType: getPassenger.type,
+            isReturnTrip: isReturnTrip || false
+        }, DRIVER_CONSTANTS.TICKET_VERIFIED);
     } catch (err) {
         if (err instanceof CustomError)
             return ResponseUtil.errorResponse(res, err.statusCode, err.message);
@@ -91,19 +142,53 @@ export const addBaggage = async (req: CustomRequest, res: Response) => {
             throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.BUS_NOT_ASSIGNED_TO_DRIVER);
         }
 
-        // Check if passenger has already purchased extra baggage
+        // Check if ticket is cancelled
+        if (getPassenger.isCancelled) {
+            throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.BAGGAGE_CANNOT_ADD_CANCELLED);
+        }
+
+        // For round trip tickets, check if this is the return trip ticket
+        const isReturnTrip = getPassenger.ticketNumber?.includes('-RT');
+        
+        // If this is a round trip booking, check if the corresponding outbound ticket is used
+        if (getPassenger.type === TripType.ROUND_TRIP && isReturnTrip) {
+            const groupTicketSerial = getPassenger.groupTicketSerial;
+            if (groupTicketSerial) {
+                // Find the outbound ticket
+                const outboundTicketNumber = getPassenger.ticketNumber.replace('-RT', '');
+                const outboundTicket = await PassengerModel.findOne({ 
+                    ticketNumber: outboundTicketNumber,
+                    groupTicketSerial: groupTicketSerial 
+                });
+
+                if (outboundTicket && outboundTicket.status !== TicketStatus.USED) {
+                    throw new CustomError(STATUS_CODES.BAD_REQUEST, "Outbound trip ticket must be used before adding baggage to return trip");
+                }
+            }
+        }
+
+        // Check if passenger has already purchased extra baggage for this specific ticket
         if (getPassenger.extraBaggageIntentId) {
             throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.BAGGAGE_ALREADY_PURCHASED);
         }
 
-        // Check if ticket is valid
-        // if (!getPassenger.isValid) {
-        //     throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.TICKET_NOT_VALID);
-        // }
+        // For round trip, check if baggage was already added to the other ticket
+        if (getPassenger.type === TripType.ROUND_TRIP) {
+            const groupTicketSerial = getPassenger.groupTicketSerial;
+            if (groupTicketSerial) {
+                const otherTicketNumber = isReturnTrip 
+                    ? getPassenger.ticketNumber.replace('-RT', '') 
+                    : getPassenger.ticketNumber + '-RT';
+                
+                const otherTicket = await PassengerModel.findOne({ 
+                    ticketNumber: otherTicketNumber,
+                    groupTicketSerial: groupTicketSerial 
+                });
 
-        // Check if ticket is cancelled
-        if (getPassenger.isCancelled) {
-            throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.BAGGAGE_CANNOT_ADD_CANCELLED);
+                if (otherTicket && otherTicket.extraBaggageIntentId) {
+                    throw new CustomError(STATUS_CODES.BAD_REQUEST, "Extra baggage already added to the other ticket in this round trip");
+                }
+            }
         }
 
         const paymentIntent = await createPaymentIntent(baggageAmount,{
@@ -114,6 +199,9 @@ export const addBaggage = async (req: CustomRequest, res: Response) => {
             baggageAmount: baggageAmount.toString(),
             driverId: req.authId,
             busId: (getBus._id as any).toString(),
+            tripType: getPassenger.type,
+            isReturnTrip: isReturnTrip || false,
+            groupTicketSerial: getPassenger.groupTicketSerial
         })
 
         // Update passenger record with payment intent ID (temporary)
@@ -133,7 +221,9 @@ export const addBaggage = async (req: CustomRequest, res: Response) => {
                 passenger: {
                     ticketNumber: getPassenger.ticketNumber,
                     fullName: getPassenger.fullName,
-                    seatLabel: getPassenger.seatLabel
+                    seatLabel: getPassenger.seatLabel,
+                    tripType: getPassenger.type,
+                    isReturnTrip: isReturnTrip || false
                 },
                 baggage: {
                     weight: baggageWeight,
@@ -142,6 +232,73 @@ export const addBaggage = async (req: CustomRequest, res: Response) => {
             },
             DRIVER_CONSTANTS.BAGGAGE_PAYMENT_INTENT_CREATED
         );
+    } catch (err) {
+        if (err instanceof CustomError)
+            return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+        ResponseUtil.handleError(res, err);
+    }
+}
+
+export const getRoundTripTickets = async (req: CustomRequest, res: Response) => {
+    try {
+        const { ticketNumber } = req.body;
+        
+        if (!ticketNumber) {
+            throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.TICKET_NUMBER_REQUIRED);
+        }
+
+        // Find the passenger by ticket number
+        const getPassenger = await PassengerModel.findOne({ ticketNumber }).select("-qrCode");
+        if (!getPassenger) {
+            throw new CustomError(STATUS_CODES.NOT_FOUND, DRIVER_CONSTANTS.TICKET_NOT_FOUND);
+        }
+
+        // Verify the bus belongs to this driver
+        const getBus = await BusModel.findById(getPassenger.busId);
+        if (!getBus) {
+            throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.BUS_NOT_FOUND);
+        }
+        
+        if (getBus.driver?.toString() !== req.authId) {
+            throw new CustomError(STATUS_CODES.BAD_REQUEST, DRIVER_CONSTANTS.BUS_NOT_ASSIGNED_TO_DRIVER);
+        }
+
+        // If this is not a round trip, return single ticket
+        if (getPassenger.type !== TripType.ROUND_TRIP) {
+            return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {
+                tickets: [getPassenger],
+                tripType: 'one_way',
+                totalTickets: 1
+            }, "Single ticket retrieved");
+        }
+
+        // For round trip, find both tickets
+        const groupTicketSerial = getPassenger.groupTicketSerial;
+        if (!groupTicketSerial) {
+            throw new CustomError(STATUS_CODES.BAD_REQUEST, "Invalid round trip ticket - missing group serial");
+        }
+
+        const allTickets = await PassengerModel.find({ 
+            groupTicketSerial: groupTicketSerial,
+            user: getPassenger.user
+        }).select("-qrCode").sort({ ticketNumber: 1 });
+
+        if (allTickets.length !== 2) {
+            throw new CustomError(STATUS_CODES.BAD_REQUEST, "Invalid round trip - missing tickets");
+        }
+
+        const outboundTicket = allTickets.find(t => !t.ticketNumber.includes('-RT'));
+        const returnTicket = allTickets.find(t => t.ticketNumber.includes('-RT'));
+
+        return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {
+            tickets: allTickets,
+            outboundTicket: outboundTicket,
+            returnTicket: returnTicket,
+            tripType: 'round_trip',
+            totalTickets: 2,
+            groupTicketSerial: groupTicketSerial
+        }, "Round trip tickets retrieved");
+
     } catch (err) {
         if (err instanceof CustomError)
             return ResponseUtil.errorResponse(res, err.statusCode, err.message);

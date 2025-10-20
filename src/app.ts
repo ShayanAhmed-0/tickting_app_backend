@@ -23,6 +23,7 @@ import destinationRoutes from "./routes/destinations.routes";
 import routesRoutes from "./routes/routes.routes";
 import stripeWebhookRoutes from "./routes/stripe-webhook.routes";
 import driverRoutes from "./routes/driver.routes";
+import adminAgentsRoutes from "./routes/admin/agents.routes";
 
 dotenv.config();
 
@@ -68,6 +69,7 @@ app.use(`${API_PREFIX}/admin/bus`, adminBusRoutes);
 app.use(`${API_PREFIX}/admin/sales-office`, adminSalesOfficeRoutes);
 app.use(`${API_PREFIX}/admin/destination`, adminDestinationRoutes);
 app.use(`${API_PREFIX}/admin/routes`, adminRoutesRoutes);
+app.use(`${API_PREFIX}/admin/agents`, adminAgentsRoutes);
 // booking routes (real-time seat booking)
 // web routes
 app.use(`/api`, webRoutes);

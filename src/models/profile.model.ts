@@ -10,6 +10,7 @@ import {
   Documents,
 } from "./common/types";
 import { IAuth } from "./auth.model";
+import { IOffice } from "./office.model";
 
 // Interface definition
 export interface IProfile extends Document {
@@ -26,6 +27,7 @@ export interface IProfile extends Document {
   preferredLanguage: Language;
   documents: Documents;
   travelPreferences?: TravelPreferences;
+  office?: ObjectId | IOffice;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,7 +46,7 @@ const ProfileSchema = new Schema<IProfile>(
     lastName: { type: String },
     dob: { type: Date },
     gender: {
-      type: String,
+      type: String, 
       enum: Object.values(Gender),
       default: Gender.PREFER_NOT_SAY,
     },
@@ -74,6 +76,11 @@ const ProfileSchema = new Schema<IProfile>(
         enum: ["window", "aisle", "front", "back", "none"],
         default: "none",
       },
+    },
+    office: {
+      type: Schema.Types.ObjectId,
+      ref: "Office",
+      default: null,
     },
   },
   commonOptions
