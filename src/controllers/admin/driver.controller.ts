@@ -7,8 +7,11 @@ import AuthModel from "../../models/auth.model";
 import { SALT_ROUNDS } from "../../config/environment";
 import bcrypt from "bcrypt";
 import ProfileModel from "../../models/profile.model";
-import { UserRole } from "../../models";
+import { UserRole, TripStatus } from "../../models";
 import helper from "../../helper";
+import TripModel from "../../models/trip.model";
+import RouteModel from "../../models/route.model";
+import BusModel from "../../models/bus.model";
 export const createDriver = async (req: Request, res: Response) => {
     try {
     let { firstName, secondName, lastName, email, password, driverLicenseId } = req.body;
@@ -133,3 +136,4 @@ export const deleteDriver = async (req: Request, res: Response) => {
     ResponseUtil.handleError(res, err);
   }
 }
+
