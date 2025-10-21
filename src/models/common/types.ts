@@ -26,6 +26,13 @@ export enum DaysEnums {
   SUNDAY = "sunday",
 }
 
+export enum RouteStatus {
+    BOARDING = "boarding",
+    DEPARTED = "departed",
+    COMPLETED = "completed",
+    CANCELLED = "cancelled",
+}
+
 export enum OtpTypes {
   registaration = "registaration",
   resend = "resend",

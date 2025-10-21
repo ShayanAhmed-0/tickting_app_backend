@@ -1,6 +1,6 @@
 import mongoose, { Schema, model, Document } from 'mongoose';
 import { commonOptions } from './common/options';
-import { DaysEnums, ObjectId } from './common/types';
+import { DaysEnums, ObjectId, RouteStatus } from './common/types';
 
 // Interface definition
 export interface IRoute extends Document {
@@ -21,12 +21,14 @@ export interface IRoute extends Document {
   isActive: boolean;
   // pricingPolicy?: PricingPolicy;
   createdAt: Date;
+  status: RouteStatus;
   updatedAt: Date;
 }
 
 // Schema definition
 const RouteSchema = new Schema<IRoute>({
   name: { type: String, required: true },
+  status : { type: String, enum: RouteStatus, default: RouteStatus.BOARDING },
   origin: { type: Schema.Types.ObjectId, ref: 'Destination', required: true },
   destination: { type: Schema.Types.ObjectId, ref: 'Destination', required: true },
   intermediateStops: [{ type: Schema.Types.ObjectId, ref: 'Destination' }],

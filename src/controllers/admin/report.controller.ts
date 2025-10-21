@@ -31,22 +31,26 @@ export const getRouteSeatReport = async (req: Request, res: Response) => {
     const route = await RouteModel.findById(routeId)
       .populate('origin', 'name description')
       .populate('destination', 'name description')
-      .populate('bus', 'serialNumber code driver')
-      .populate('bus.driver', 'profile');
+      .populate({
+        path: 'bus',
+        select: 'serialNumber code driver seatLayout capacity totalBookedSeats',
+        populate: {
+          path: 'driver',
+          select: 'profile',
+          populate: {
+            path: 'profile',
+            select: 'firstName secondName lastName contactNumber'
+          }
+        }
+      });
 
     if (!route) {
       return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Route not found");
     }
 
-    const bus = route.bus as any;
-    if (!bus) {
-      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Bus not found for this route");
-    }
-
-    // Get bus details with seat layout
-    const busDetails = await BusModel.findById(bus._id).populate('driver', 'profile');
+    const busDetails = route.bus as any;
     if (!busDetails) {
-      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Bus details not found");
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Bus not found for this route");
     }
 
     // Create a new date object to avoid modifying the original
@@ -58,7 +62,7 @@ export const getRouteSeatReport = async (req: Request, res: Response) => {
 
     // Get all passengers for this route and date
     const passengers = await PassengerModel.find({
-      busId: bus._id,
+      busId: busDetails._id,
       DepartureDate: {
         $gte: startOfDay,
         $lt: endOfDay
@@ -103,14 +107,14 @@ export const getRouteSeatReport = async (req: Request, res: Response) => {
     // Calculate statistics based on actual passenger records
     const totalSeats = seats.length;
     const bookedSeats = passengers.length;
-    const availableSeats = seatReport.filter(seat => seat.isFree).length;
+    const availableSeats = seatReport.filter((seat: any) => seat.isFree).length;
     const occupiedSeats = passengers.filter(p => p.alreadyScanned).length;
 
     // Get driver information
     const driver = busDetails.driver as any;
     const driverInfo = driver ? {
       id: driver._id,
-      name: driver.profile?.fullName || 'Unknown Driver',
+      name: driver.profile ? `${driver.profile.firstName || ''} ${driver.profile.secondName || ''} ${driver.profile.lastName || ''}`.trim() || 'Unknown Driver' : 'Unknown Driver',
       contact: driver.profile?.contactNumber || 'N/A'
     } : null;
 
@@ -139,7 +143,7 @@ export const getRouteSeatReport = async (req: Request, res: Response) => {
         occupiedSeats,
         occupancyRate: totalSeats > 0 ? ((bookedSeats / totalSeats) * 100).toFixed(1) : '0'
       },
-      seatReport: seatReport.map(seat => ({
+      seatReport: seatReport.map((seat: any) => ({
         seatNumber: seat.seatNumber,
         status: seat.isFree ? 'Free' : 'Occupied',
         passengerName: seat.passengerInfo?.fullName || (seat.isFree ? 'Free' : 'Unknown'),

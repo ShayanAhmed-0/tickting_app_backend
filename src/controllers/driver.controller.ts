@@ -4,10 +4,12 @@ import { STATUS_CODES } from "../constants/statusCodes";
 import { ADMIN_CONSTANTS, AUTH_CONSTANTS, DRIVER_CONSTANTS } from "../constants/messages";
 import { CustomError } from "../classes/CustomError";
 import PassengerModel from "../models/passenger.models";
-import { PaymentGateway, PaymentTransaction, TicketStatus, TransactionStatus, TripType } from "../models";
+import { PaymentGateway, PaymentTransaction, Profile, RouteStatus, TicketStatus, TransactionStatus, TripType } from "../models";
 import { CustomRequest } from "../interfaces/auth";
 import BusModel from "../models/bus.model";
 import { createPaymentIntent } from "../utils/Stripe/stripe";
+import AuthModel from "../models/auth.model";
+import RouteModel from "../models/route.model";
 
 export const verifyTicket = async (req: CustomRequest, res: Response) => {
     try {
@@ -389,3 +391,78 @@ export const getPassengersCount = async (req: CustomRequest, res: Response) => {
         ResponseUtil.handleError(res, err);
     }
 }
+
+export const startTrip = async (req: CustomRequest, res: Response) => {
+    try {
+      const authId = req.authId
+      const getUser = await AuthModel.findById(authId)
+      if(!getUser){
+        throw new CustomError(STATUS_CODES.NOT_FOUND, AUTH_CONSTANTS.USER_NOT_FOUND);
+      }
+    //   const getProfile = await Profile.findById(getUser.profile)
+    //   if(!getProfile){
+    //     throw new CustomError(STATUS_CODES.NOT_FOUND, AUTH_CONSTANTS.PROFILE_NOT_FOUND);
+    //   }
+      const getBus = await BusModel.findOne({ driver: authId })
+      if(!getBus){
+        throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.BUS_NOT_FOUND);
+      }
+      const getRoute = await RouteModel.findOne({ bus: getBus._id })
+      if(!getRoute){
+        throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.ROUTE_NOT_FOUND);
+      }
+      const updateRoute = await RouteModel.findByIdAndUpdate(getRoute._id, { status: RouteStatus.DEPARTED }, { new: true })
+
+      return ResponseUtil.successResponse(
+        res,
+        STATUS_CODES.SUCCESS,
+        { 
+          route: updateRoute,
+          message: "Trip started successfully. Passengers can now board."
+        },
+        "Trip started successfully"
+      );
+  
+    } catch (err) {
+      if (err instanceof CustomError)
+        return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+      ResponseUtil.handleError(res, err);
+    }
+  };
+  
+  export const endTrip = async (req: CustomRequest, res: Response) => {
+    try {
+        const authId = req.authId
+        const getUser = await AuthModel.findById(authId)
+        if(!getUser){
+            throw new CustomError(STATUS_CODES.NOT_FOUND, AUTH_CONSTANTS.USER_NOT_FOUND);
+        }
+        const getBus = await BusModel.findOne({ driver: authId })
+        if(!getBus){
+            throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.BUS_NOT_FOUND);
+        }
+        const getRoute = await RouteModel.findOne({ bus: getBus._id })
+        if(!getRoute){
+            throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.ROUTE_NOT_FOUND);
+        }
+        if(getRoute.status !== RouteStatus.DEPARTED){
+            throw new CustomError(STATUS_CODES.BAD_REQUEST, "Trip not started yet");
+        }
+        const updateRoute = await RouteModel.findByIdAndUpdate(getRoute._id, { status: RouteStatus.COMPLETED }, { new: true })
+  
+      return ResponseUtil.successResponse(
+        res,
+        STATUS_CODES.SUCCESS,
+        { 
+          trip: updateRoute,
+          message: "Trip completed successfully."
+        },
+        "Trip ended successfully"
+      );
+  
+    } catch (err) {
+      if (err instanceof CustomError)
+        return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+      ResponseUtil.handleError(res, err);
+    }
+  };
