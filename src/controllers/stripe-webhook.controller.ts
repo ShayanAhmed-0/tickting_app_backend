@@ -278,20 +278,21 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       
       // Create QR code data for individual passenger
       const qrCodeData = QRCodeUtils.createBookingQRData({
-        userId: userId,
-        routeId: isReturnTrip ? returnRouteId : routeId,
-        busId: currentBus?._id?.toString() || (isReturnTrip ? returnBusId : busId),
-        passengers: [passenger], // Single passenger
-        routeInfo: {
-          from: (currentRoute as any)?.origin?.name || "Origin",
-          to: (currentRoute as any)?.destination?.name || "Destination",
-          departureDate: isReturnTrip ? new Date(roundTripDate) : ((getRoutePrice as any)?.departureTime || new Date()),
-          returnDate: tripType === "round_trip" ? new Date(roundTripDate) : null,
-          isReturnTrip: isReturnTrip
-        },
-        paymentType: "stripe",
-        totalPrice: paymentIntent.amount / 100, // Convert from cents
-        groupTicketSerial: groupTicketSerial || undefined
+        ticketNumber: passenger.ticketNumber,
+          // userId: userId,
+          // routeId: isReturnTrip ? returnRouteId : routeId,
+          // busId: currentBus?._id?.toString() || (isReturnTrip ? returnBusId : busId),
+          // passengers: [passenger], // Single passenger
+          // routeInfo: {
+          //   from: (currentRoute as any)?.origin?.name || "Origin",
+          //   to: (currentRoute as any)?.destination?.name || "Destination",
+          //   departureDate: isReturnTrip ? new Date(roundTripDate) : ((getRoutePrice as any)?.departureTime || new Date()),
+          //   returnDate: tripType === "round_trip" ? new Date(roundTripDate) : null,
+          //   isReturnTrip: isReturnTrip
+          // },
+          // paymentType: "stripe",
+          // totalPrice: paymentIntent.amount / 100, // Convert from cents
+          // groupTicketSerial: groupTicketSerial || undefined
       });
 
       // Generate QR code as base64 string for this passenger

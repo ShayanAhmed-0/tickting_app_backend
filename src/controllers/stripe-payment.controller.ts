@@ -271,19 +271,20 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
     for (const passenger of passengersDB) {
       // Create QR code data for individual passenger
       const qrCodeData = QRCodeUtils.createBookingQRData({
-        userId: userId,
-        routeId: routeId,
-        busId: getBus._id?.toString() || busId,
-        passengers: [passenger], // Single passenger
-        routeInfo: {
-          from: (getRoutePrice as any)?.origin?.name || "Origin",
-          to: (getRoutePrice as any)?.destination?.name || "Destination",
-          departureDate: (getRoutePrice as any)?.departureTime || new Date(),
-          returnDate: new Date()
-        },
-        paymentType: "stripe",
-        totalPrice: pricePerSeat,
-        groupTicketSerial: groupTicketSerial || undefined
+        ticketNumber: passenger.ticketNumber,
+        // userId: userId,
+        // routeId: routeId,
+        // busId: getBus._id?.toString() || busId,
+        // passengers: [passenger], // Single passenger
+        // routeInfo: {
+        //   from: (getRoutePrice as any)?.origin?.name || "Origin",
+        //   to: (getRoutePrice as any)?.destination?.name || "Destination",
+        //   departureDate: (getRoutePrice as any)?.departureTime || new Date(),
+        //   returnDate: new Date()
+        // },
+        // paymentType: "stripe",
+        // totalPrice: pricePerSeat,
+        // groupTicketSerial: groupTicketSerial || undefined
       });
 
       // Generate QR code as base64 string for this passenger
@@ -298,7 +299,7 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
         ...passenger.toObject(),
         qrCode: {
           data: qrCodeBase64,
-          bookingId: qrCodeData.bookingId,
+          bookingId: qrCodeData.ticketNumber,
           format: "base64"
         }
       });

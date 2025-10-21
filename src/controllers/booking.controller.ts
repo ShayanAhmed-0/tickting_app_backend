@@ -379,20 +379,21 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       
       // Create QR code data for individual passenger
       const qrCodeData = QRCodeUtils.createBookingQRData({
-        userId: userId,
-        routeId: isReturnTrip ? returnRoute?._id?.toString() : routeId,
-        busId: currentBus?._id?.toString() || (isReturnTrip ? returnRoute?.bus : busId),
-        passengers: [passenger], // Single passenger
-        routeInfo: {
-          from: (currentRoute as any)?.origin?.name || "Origin",
-          to: (currentRoute as any)?.destination?.name || "Destination",
-          departureDate: isReturnTrip ? new Date(roundTripDate) : ((getRoutPrice as any)?.departureTime || new Date()),
-          returnDate: tripType === TripType.ROUND_TRIP ? new Date(roundTripDate) : null,
-          isReturnTrip: isReturnTrip
-        },
-        paymentType: paymentType,
-        totalPrice: (getRoutPrice?.destination as any)?.priceFromDFW * (tripType === TripType.ROUND_TRIP ? 2 : 1),
-        groupTicketSerial: groupTicketSerial || undefined
+        ticketNumber: passenger.ticketNumber,
+        // userId: userId,
+        // routeId: isReturnTrip ? returnRoute?._id?.toString() : routeId,
+        // busId: currentBus?._id?.toString() || (isReturnTrip ? returnRoute?.bus : busId),
+        // passengers: [passenger], // Single passenger
+        // routeInfo: {
+        //   from: (currentRoute as any)?.origin?.name || "Origin",
+        //   to: (currentRoute as any)?.destination?.name || "Destination",
+        //   departureDate: isReturnTrip ? new Date(roundTripDate) : ((getRoutPrice as any)?.departureTime || new Date()),
+        //   returnDate: tripType === TripType.ROUND_TRIP ? new Date(roundTripDate) : null,
+        //   isReturnTrip: isReturnTrip
+        // },
+        // paymentType: paymentType,
+        // totalPrice: (getRoutPrice?.destination as any)?.priceFromDFW * (tripType === TripType.ROUND_TRIP ? 2 : 1),
+        // groupTicketSerial: groupTicketSerial || undefined
       });
 
       // Generate QR code as base64 string for this passenger
@@ -407,7 +408,7 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
         ...passenger.toObject(),
         qrCode: {
           data: qrCodeBase64,
-          bookingId: qrCodeData.bookingId,
+          bookingId: qrCodeData.ticketNumber,
           format: "base64"
         },
         isReturnTrip: isReturnTrip
