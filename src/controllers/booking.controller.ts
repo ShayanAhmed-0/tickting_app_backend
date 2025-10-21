@@ -10,13 +10,14 @@ import { createPaymentIntent } from "../utils/Stripe/stripe";
 import BusModel from "../models/bus.model";
 import PassengerModel from "../models/passenger.models";
 import { QRCodeUtils } from "../utils/QRCode";
-import { ForWho, SeatStatus, TripType, UserRole } from "../models/common/types";
+import { ForWho, SeatStatus, TripType, UserRole, TicketStatus } from "../models/common/types";
 import { io } from "../server";
 import AuthModel from "../models/auth.model";
 import { redis, RedisKeys } from "../config/redis";
-import { Booking } from "../models";
+import { Booking, Profile } from "../models";
 import helper from "../helper";
 import { TicketPDFGenerator, TicketPDFData } from "../utils/PDF/ticketPDFGenerator";
+import { calculatePassengerFare, calculateFare } from "../utils/pricing";
 
 export const bookSeats = async (req: CustomRequest, res: Response) => {
   try {
@@ -170,10 +171,9 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       );
     }
     
-    let getTotalPrice = (getRoutPrice?.destination as any)?.priceFromDFW * passengers.length;
-    if(tripType === TripType.ROUND_TRIP) {
-      getTotalPrice = getTotalPrice * 2;
-    }
+    // Calculate total price using the DFW hub pricing system
+    const baseFare = await calculateFare(routeId, tripType);
+    let getTotalPrice = baseFare * passengers.length;
     if(paymentType === "stripe") {
     // Add passengers data in redis with unique key and send that key in payment intent
     const { v4: uuidv4 } = require('uuid');
@@ -746,3 +746,140 @@ export const searchTickets = async (req: CustomRequest, res: Response) => {
     ResponseUtil.handleError(res, err);
   }
 };
+
+export const cancelBooking = async (req: CustomRequest, res: Response) => {
+  try {
+    const userId = req.authId;
+    const { ticketNumber, reason } = req.body;
+
+    if(!userId) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "User not found");
+    }
+
+    if(!ticketNumber) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Ticket number is required");
+    }
+
+    // Find the ticket
+    const ticket = await PassengerModel.findOne({ 
+      ticketNumber: ticketNumber,
+      user: userId 
+    });
+
+    if(!ticket) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Ticket not found or you don't have permission to cancel this ticket");
+    }
+
+    // Check if ticket is already cancelled
+    if(ticket.isCancelled) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Ticket is already cancelled");
+    }
+
+    // Check if ticket is already used/checked in
+    if(ticket.alreadyScanned) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Cannot cancel a ticket that has already been used");
+    }
+
+    // Check if departure date has passed (allow cancellation up to 1 hour before departure)
+    const departureDate = new Date(ticket.DepartureDate);
+    const oneHourBeforeDeparture = new Date(departureDate.getTime() - (60 * 60 * 1000));
+    const now = new Date();
+
+    if(now > oneHourBeforeDeparture) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Cannot cancel ticket less than 1 hour before departure");
+    }
+
+    // Get all related tickets (for family or round trip bookings)
+    let ticketsToCancel = [ticket];
+    
+    if(ticket.for === ForWho.FAMILY && ticket.groupTicketSerial) {
+      const familyTickets = await PassengerModel.find({ 
+        groupTicketSerial: ticket.groupTicketSerial,
+        user: userId 
+      });
+      ticketsToCancel = familyTickets;
+    } else if(ticket.type === TripType.ROUND_TRIP && ticket.groupTicketSerial) {
+      const roundTripTickets = await PassengerModel.find({
+        groupTicketSerial: ticket.groupTicketSerial,
+        user: userId
+      });
+      ticketsToCancel = roundTripTickets;
+    }
+
+    // Cancel all related tickets
+    const cancelledTickets = [];
+    let totalRefundAmount = 0;
+    
+    for (const ticketToCancel of ticketsToCancel) {
+      // Update ticket status
+      ticketToCancel.isCancelled = true;
+      ticketToCancel.status = TicketStatus.REVOKED;
+      await ticketToCancel.save();
+
+      // Calculate individual ticket price using the DFW hub pricing system
+      const ticketPrice = await calculatePassengerFare(ticketToCancel);
+      totalRefundAmount += ticketPrice;
+
+      // Update bus seat status back to available
+      await BusModel.updateOne(
+        { 
+          _id: ticketToCancel.busId,
+          "seatLayout.seats.seatLabel": ticketToCancel.seatLabel 
+        },
+        { 
+          $set: { 
+            "seatLayout.seats.$.status": SeatStatus.AVAILABLE,
+            "seatLayout.seats.$.isAvailable": true,
+            "seatLayout.seats.$.userId": null
+          },
+          $inc: { totalBookedSeats: -1 }
+        }
+      );
+
+      // Emit seat status change to all users in the route room
+      const route = await RouteModel.findOne({ bus: ticketToCancel.busId });
+      if(route) {
+        io.to(`route:${route._id}`).emit('seat:status:changed', {
+          routeId: route._id,
+          seatLabel: ticketToCancel.seatLabel,
+          status: SeatStatus.AVAILABLE,
+          userId: null,
+          busId: ticketToCancel.busId
+        });
+      }
+
+      cancelledTickets.push({
+        ticketNumber: ticketToCancel.ticketNumber,
+        seatLabel: ticketToCancel.seatLabel,
+        fullName: ticketToCancel.fullName,
+        isReturnTrip: ticketToCancel.ticketNumber.includes('-RT')
+      });
+    }
+    
+    // Update user's refund amount
+    if (totalRefundAmount > 0) {
+      await Profile.updateOne(
+        { auth: userId },
+        { $inc: { refundAmount: totalRefundAmount } }
+      );
+    }
+
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { 
+        cancelledTickets,
+        totalCancelled: cancelledTickets.length,
+        groupTicketSerial: ticket.groupTicketSerial,
+        reason: reason || "No reason provided"
+      },
+      `Successfully cancelled ${cancelledTickets.length} ticket(s)`
+    );
+
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+

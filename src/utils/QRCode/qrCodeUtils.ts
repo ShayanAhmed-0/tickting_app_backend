@@ -1,7 +1,7 @@
 const QRCode = require('qrcode');
 
 export interface BookingQRData {
-  note: string;
+  note?: string;
   bookingId?: string;
   userId?: string;
   routeId?: string;
@@ -86,35 +86,35 @@ export class QRCodeUtils {
     totalPrice: number;
     groupTicketSerial?: string;
   }): BookingQRData {
-    return {
-    // Show a user-friendly data structure for QR code for now
-      note: "This QR code contains essential ticket, route, and passenger information for easy verification."
-    };
     // return {
-    //   bookingId: `BK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    //   userId: bookingData.userId,
-    //   routeId: bookingData.routeId,
-    //   busId: bookingData.busId,
-    //   groupTicketSerial: bookingData.groupTicketSerial,
-    //   passengers: bookingData.passengers.map(passenger => ({
-    //     fullName: passenger.fullName,
-    //     seatLabel: passenger.seatLabel,
-    //     ticketNumber: passenger.ticketNumber,
-    //     gender: passenger.gender,
-    //     dob: passenger.dob,
-    //     contactNumber: passenger.contactNumber,
-    //     DocumentId: passenger.DocumentId
-    //   })),
-    //   routeInfo: {
-    //     from: bookingData.routeInfo.from,
-    //     to: bookingData.routeInfo.to,
-    //     departureDate: bookingData.routeInfo.departureDate,
-    //     returnDate: bookingData.routeInfo.returnDate
-    //   },
-    //   paymentType: bookingData.paymentType,
-    //   totalPrice: bookingData.totalPrice,
-    //   bookingDate: new Date().toISOString()
+    // // Show a user-friendly data structure for QR code for now
+    //   note: "This QR code contains essential ticket, route, and passenger information for easy verification."
     // };
+    return {
+      bookingId: `BK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      userId: bookingData.userId,
+      routeId: bookingData.routeId,
+      busId: bookingData.busId,
+      groupTicketSerial: bookingData.groupTicketSerial,
+      passengers: bookingData.passengers.map(passenger => ({
+        fullName: passenger.fullName,
+        seatLabel: passenger.seatLabel,
+        ticketNumber: passenger.ticketNumber,
+        gender: passenger.gender,
+        dob: passenger.dob,
+        contactNumber: passenger.contactNumber,
+        DocumentId: passenger.DocumentId
+      })),
+      routeInfo: {
+        from: bookingData.routeInfo.from,
+        to: bookingData.routeInfo.to,
+        departureDate: bookingData.routeInfo.departureDate,
+        returnDate: bookingData.routeInfo.returnDate
+      },
+      paymentType: bookingData.paymentType,
+      totalPrice: bookingData.totalPrice,
+      bookingDate: new Date().toISOString()
+    };
   }
 }
 

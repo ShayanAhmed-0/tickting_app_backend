@@ -111,4 +111,5 @@ export const DRIVER_CONSTANTS = {
   BAGGAGE_CANNOT_ADD_CANCELLED: "Cannot add baggage to a cancelled ticket",
   BAGGAGE_PAYMENT_INTENT_CREATED: "Payment intent created for extra baggage. Please complete the payment.",
   PASSENGERS_COUNT_FETCHED: "Passengers count fetched successfully",
+  BAGGAGE_ADDED_SUCCESSFULLY: "Extra baggage added successfully",
 }

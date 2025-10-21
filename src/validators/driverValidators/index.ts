@@ -13,11 +13,16 @@ export const verifyTicketSchema: ZodSchema<{
 export const addBaggageSchema: ZodSchema<{
   ticketNumber: string;
   baggageAmount: number;
+  method: "cash" | "stripe";
 }> = z.object({
   ticketNumber: z.string()
     .min(1, "Ticket number is required")
     .max(255, "Ticket number must be less than 255 characters"),
   
+    method: z.enum(["cash", "stripe"], {
+      errorMap: () => ({ message: "Payment type must be either 'cash' or 'stripe'" })
+    }),
+
   baggageAmount: z.number({
     required_error: "Baggage amount is required",
     invalid_type_error: "Baggage amount must be a number"

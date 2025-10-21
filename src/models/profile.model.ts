@@ -27,6 +27,7 @@ export interface IProfile extends Document {
   preferredLanguage: Language;
   documents: Documents;
   travelPreferences?: TravelPreferences;
+  refundAmount?: number;
   office?: ObjectId | IOffice;
   createdAt: Date;
   updatedAt: Date;
@@ -41,6 +42,7 @@ const ProfileSchema = new Schema<IProfile>(
       required: true,
       unique: true,
     },
+    refundAmount: { type: Number, default: 0 },
     firstName: { type: String, required: true },
     secondName: { type: String },
     lastName: { type: String },

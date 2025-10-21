@@ -77,5 +77,20 @@ export const confirmStripePaymentSchema: ZodSchema<{
     .max(255, "Payment Intent ID must be less than 255 characters")
 });
 
+
+// Cancel booking schema
+export const cancelBookingSchema: ZodSchema<{
+  ticketNumber: string;
+  reason?: string;
+}> = z.object({
+  ticketNumber: z.string()
+    .min(1, "Ticket number is required")
+    .max(100, "Ticket number must be less than 100 characters"),
+  
+  reason: z.string()
+    .max(500, "Reason must be less than 500 characters")
+    .optional()
+});
+
 // Optional: Schema for validating individual passenger (if needed separately)
 export const singlePassengerSchema = passengerSchema;
