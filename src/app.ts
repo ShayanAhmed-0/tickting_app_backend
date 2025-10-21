@@ -24,6 +24,7 @@ import routesRoutes from "./routes/routes.routes";
 import stripeWebhookRoutes from "./routes/stripe-webhook.routes";
 import driverRoutes from "./routes/driver.routes";
 import adminAgentsRoutes from "./routes/admin/agents.routes";
+import adminReportRoutes from "./routes/admin/report.routes";
 
 dotenv.config();
 
@@ -70,6 +71,7 @@ app.use(`${API_PREFIX}/admin/sales-office`, adminSalesOfficeRoutes);
 app.use(`${API_PREFIX}/admin/destination`, adminDestinationRoutes);
 app.use(`${API_PREFIX}/admin/routes`, adminRoutesRoutes);
 app.use(`${API_PREFIX}/admin/agents`, adminAgentsRoutes);
+app.use(`${API_PREFIX}/admin/reports`, adminReportRoutes);
 // booking routes (real-time seat booking)
 // web routes
 app.use(`/api`, webRoutes);

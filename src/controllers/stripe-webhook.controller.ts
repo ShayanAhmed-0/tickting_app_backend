@@ -414,7 +414,8 @@ async function handleExtraBaggagePaymentSuccess(paymentIntent: Stripe.PaymentInt
     const updatedPassenger = await PassengerModel.findByIdAndUpdate(
       passengerId,
       {
-        additionalBaggage: parseFloat(baggageAmount)*4.6,
+        additionalBaggage: parseFloat(baggageAmount),
+        baggageWeight: parseFloat(baggageWeight)*4.6,
         extraBaggageIntentId: paymentIntent.id, 
       },
       { new: true }

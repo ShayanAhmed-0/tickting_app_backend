@@ -4,7 +4,7 @@ import { STATUS_CODES } from "../constants/statusCodes";
 import { ADMIN_CONSTANTS, AUTH_CONSTANTS, DRIVER_CONSTANTS } from "../constants/messages";
 import { CustomError } from "../classes/CustomError";
 import PassengerModel from "../models/passenger.models";
-import { TicketStatus, TripType } from "../models";
+import { PaymentGateway, PaymentTransaction, TicketStatus, TransactionStatus, TripType } from "../models";
 import { CustomRequest } from "../interfaces/auth";
 import BusModel from "../models/bus.model";
 import { createPaymentIntent } from "../utils/Stripe/stripe";
@@ -115,7 +115,7 @@ export const verifyTicket = async (req: CustomRequest, res: Response) => {
 
 export const addBaggage = async (req: CustomRequest, res: Response) => {
     try {
-        const { ticketNumber, baggageAmount } = req.body;
+        const { ticketNumber, baggageAmount, method } = req.body;
         const baggageWeight = baggageAmount
         // Validate required fields
         if (!ticketNumber) {
@@ -191,6 +191,7 @@ export const addBaggage = async (req: CustomRequest, res: Response) => {
             }
         }
 
+        if (method === "stripe") {
         const paymentIntent = await createPaymentIntent(baggageAmount,{
             type: 'extra_baggage',
             passengerId: (getPassenger._id as any).toString(),
@@ -230,8 +231,72 @@ export const addBaggage = async (req: CustomRequest, res: Response) => {
                     amount: baggageAmount
                 }
             },
-            DRIVER_CONSTANTS.BAGGAGE_PAYMENT_INTENT_CREATED
+                DRIVER_CONSTANTS.BAGGAGE_PAYMENT_INTENT_CREATED
+            );
+        } else {
+    
+
+    if (!getPassenger || !ticketNumber) {
+      console.error('Missing required metadata for extra baggage payment');
+      return;
+    }
+
+    // Update passenger record with extra baggage details
+    const updatedPassenger = await PassengerModel.findByIdAndUpdate(
+        getPassenger._id,
+      {
+        additionalBaggage: parseFloat(baggageAmount),
+        baggageWeight: parseFloat(baggageWeight)*4.6,
+        // extraBaggageIntentId: paymentIntent.id, 
+      },
+      { new: true }
+    );
+
+    if (!updatedPassenger) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, DRIVER_CONSTANTS.TICKET_NOT_FOUND);
+      return;
+    }
+
+    // For round trip, also update the other ticket in the pair
+    if (getPassenger.type === TripType.ROUND_TRIP && getPassenger.groupTicketSerial) {
+      const otherTicketNumber = isReturnTrip 
+        ? ticketNumber.replace('-RT', '') 
+        : ticketNumber + '-RT';
+      
+      const otherTicket = await PassengerModel.findOne({ 
+        ticketNumber: otherTicketNumber,
+        groupTicketSerial: getPassenger.groupTicketSerial 
+      });
+
+      if (otherTicket) {
+        await PassengerModel.findByIdAndUpdate(
+          otherTicket._id,
+          {
+            additionalBaggage: parseFloat(baggageAmount)*4.6,
+            // extraBaggageIntentId: paymentIntent.id, 
+          }
         );
+        console.log('Updated both tickets in round trip for extra baggage');
+      }
+    }
+
+    // Create payment transaction record
+    await PaymentTransaction.create({
+      amount: parseFloat(baggageAmount),
+      currency: "usd",
+      gateway: PaymentGateway.MANUAL_CASH,
+    //   gatewayResponse: paymentIntent,
+    //   transactionId: paymentIntent.id,
+      status: TransactionStatus.SUCCEEDED,
+      createdBy: req.authId
+    });
+
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {
+        updatedPassenger,
+        message: "Extra baggage added successfully"
+    }, DRIVER_CONSTANTS.BAGGAGE_ADDED_SUCCESSFULLY);
+
+        }
     } catch (err) {
         if (err instanceof CustomError)
             return ResponseUtil.errorResponse(res, err.statusCode, err.message);
