@@ -27,7 +27,7 @@ export interface IPassenger extends Document {
   ticketNumber: string;
   fullName: string;
   gender: Gender;
-  dob: Date;
+  dob: string;
   contactNumber: string;
   DocumentId: string
   groupTicketSerial?: string;
@@ -66,7 +66,7 @@ const PassengerSchema = new Schema<IPassenger>(
     ticketNumber: { type: String, required: true },
     fullName: { type: String, required: true },
     gender: { type: String, enum: Object.values(Gender), required: true },
-    dob: { type: Date, required: false },
+    dob: { type: String, required: false },
     contactNumber: { type: String, required: true },
     DocumentId: { type: String, required: false },
     groupTicketSerial: { type: String, default: null },
