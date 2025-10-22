@@ -207,6 +207,27 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
     // Create passenger records
     for (let i = 0; i < passengersData.length; i++) {
       const passenger = passengersData[i];
+      
+      // Properly validate and format the date of birth
+      // if (passenger.dob) {
+      //   // If dob is a string, try to parse it
+      //   if (typeof passenger.dob === 'string') {
+      //     const dateObj = new Date(passenger.dob);
+      //     // Check if the date is valid
+      //     if (isNaN(dateObj.getTime())) {
+      //       throw new Error(`Invalid date format for passenger ${i + 1}: ${passenger.dob}`);
+      //     }
+      //     passenger.dob = dateObj;
+      //   }
+      //   // If it's already a Date object, validate it
+      //   else if (passenger.dob instanceof Date) {
+      //     if (isNaN(passenger.dob.getTime())) {
+      //       throw new Error(`Invalid date for passenger ${i + 1}`);
+      //     }
+      //   }
+      // } else {
+      //   throw new Error(`Date of birth is required for passenger ${i + 1}`);
+      // }
 
       const create = await PassengerModel.create({
         user: userId,
