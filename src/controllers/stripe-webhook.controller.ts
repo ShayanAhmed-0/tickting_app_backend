@@ -84,7 +84,9 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
     const returnBusId = metadata.returnBusId;
     const roundTripDate = metadata.roundTripDate;
     const departureDate = metadata.departureDate;
-
+    const office = metadata.office;
+    const bookedBy = metadata.bookedBy;
+    const salesOffice = metadata.salesOffice;
     if (!userId || !routeId || !busId) {
       console.error('Missing required metadata in payment intent');
       return;
@@ -145,8 +147,10 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
 
       const create = await PassengerModel.create({
         user: userId,
-        bookedBy: "USER",
+        bookedBy: bookedBy,
         seatLabel: passenger.seatLabel,
+        office: office,
+        salesOffice: salesOffice,
         busId: getBus._id,
         for: forType,
         departureDate: new Date(departureDate),
@@ -182,7 +186,9 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
         
         const returnPassenger = await PassengerModel.create({
           user: userId,
-          bookedBy: "USER",
+          bookedBy: bookedBy,
+          office: office,
+          salesOffice: salesOffice,
           seatLabel: passenger.seatLabel,
           busId: returnBus._id,
           for: forType,

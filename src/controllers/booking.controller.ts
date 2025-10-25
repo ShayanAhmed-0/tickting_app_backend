@@ -28,30 +28,11 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
     if(!userId) {
       return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "User not found");
     }
-    
-    // Normalize bookedBy to match enum values (lowercase)
-    if (bookedBy && typeof bookedBy === 'string') {
-      const bookedByLower = bookedBy.toLowerCase();
-      switch (bookedByLower) {
-        case 'customer':
-          bookedBy = UserRole.CUSTOMER;
-          break;
-        case 'cashier':
-          bookedBy = UserRole.CASHIER;
-          break;
-        case 'manager':
-          bookedBy = UserRole.MANAGER;
-          break;
-        case 'driver':
-          bookedBy = UserRole.DRIVER;
-          break;
-        case 'super_admin':
-          bookedBy = UserRole.SUPER_ADMIN;
-          break;
-        default:
-          bookedBy = UserRole.CUSTOMER;
-      }
-    }
+
+    const user = await AuthModel.findById(userId).populate({path: 'profile', select: 'office' , populate: {path: 'office', select: 'name'}});
+    const office = (user?.profile as any)?.office?.name;
+    const salesOffice = (user?.profile as any)?.office?._id;
+    bookedBy = user?.role as UserRole;
 
     // Validate roundTripDate for round trip bookings
     if(tripType === TripType.ROUND_TRIP && !roundTripDate) {
@@ -252,6 +233,8 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       routeId: routeId,
       userId: userId,
       bookedBy: bookedBy,
+      office: office,
+      salesOffice: salesOffice,
       totalPrice: getTotalPrice,
       seats: getUserSeats.length,
       busId: getBus._id?.toString() || busId,
@@ -298,6 +281,8 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       
       const create=await PassengerModel.create({
         user: userId,
+        office: office,
+        salesOffice: salesOffice,
         bookedBy: bookedBy, // Assuming user role
         seatLabel: passenger.seatLabel,
         busId: getBus._id?.toString() || busId,
@@ -332,6 +317,8 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
         
         const returnPassenger = await PassengerModel.create({
           user: userId,
+          office: office,
+          salesOffice: salesOffice,
           bookedBy: bookedBy,
           seatLabel: passenger.seatLabel,
           busId: returnBus._id?.toString() || returnRoute.bus,

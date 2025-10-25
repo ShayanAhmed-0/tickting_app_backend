@@ -16,6 +16,7 @@ import {
 import { IAuth } from "./auth.model";
 import { IProfile } from "./profile.model";
 import { IBus } from "./bus.model";
+import { IOffice } from "./office.model";
 
 // Interface definition
 export interface IPassenger extends Document {
@@ -49,8 +50,11 @@ export interface IPassenger extends Document {
   checkedInBy: ObjectId | IAuth;
   paymentIntentId: string;
   extraBaggageIntentId: string;
+  price: number;
+  currency: string;
+  office: string;
+  salesOffice: ObjectId | IOffice;
 }
-
 // Schema definition
 const PassengerSchema = new Schema<IPassenger>(
   {
@@ -86,6 +90,10 @@ const PassengerSchema = new Schema<IPassenger>(
     checkedInBy: { type: Schema.Types.ObjectId, ref: "Auth", default: null },
     paymentIntentId: { type: String, default: null },
     extraBaggageIntentId: { type: String, default: null },
+    price: { type: Number, required: true, default: 0 },
+    currency: { type: String, default: "MXN" },
+    office: { type: String, default: null },
+    salesOffice: { type: Schema.Types.ObjectId, ref: "Office", default: null },
   },
   commonOptions
 );
