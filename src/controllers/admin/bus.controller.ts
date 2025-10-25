@@ -80,7 +80,8 @@ export const createBus = async (req: Request, res: Response) => {
         description, 
         serialNumber,  
         isActive, 
-        driverId, 
+        driverId,
+        mxdriverId, 
         departureTime, 
         departureDays,
         capacity
@@ -110,6 +111,7 @@ export const createBus = async (req: Request, res: Response) => {
         seatLayout,
         isActive: isActive !== undefined ? isActive : true,
         driver: driverId || null,
+        mxdriverId: mxdriverId || null,
         departureTime: departureTime ? new Date(departureTime) : null,
         departureDay: departureDays || []
       });
@@ -150,7 +152,7 @@ export const getBuses = async (req: Request, res: Response) => {
       page: Number(page),
       limit: Number(limit),
       sort: { createdAt: -1 } as Record<string, 1 | -1>,
-      populate: [{ path: "driver", select: "profile", populate: { path: "profile", select: "firstName secondName lastName" } }],
+      populate: [{ path: "driver", select: "profile", populate: { path: "profile", select: "firstName secondName lastName" } }, { path: "mxdriverId", select: "profile", populate: { path: "profile", select: "firstName secondName lastName" } }],
     };
     const buses = await helper.PaginateHelper.customPaginate("buses", Bus, query, options);
     return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { buses }, ADMIN_CONSTANTS.BUS_FETCHED);
@@ -164,7 +166,7 @@ export const getBuses = async (req: Request, res: Response) => {
 export const updateBus = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { code, description, serialNumber, isActive, driverId, departureTime, departureDays, capacity } = req.body;
+    const { code, description, serialNumber, isActive, driverId, mxdriverId, departureTime, departureDays, capacity } = req.body;
     
     // Build update object with only provided fields
     const updateData: any = {};
@@ -173,13 +175,14 @@ export const updateBus = async (req: Request, res: Response) => {
     if (serialNumber !== undefined) updateData.serialNumber = serialNumber;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (driverId !== undefined) updateData.driver = driverId; // Fix: use 'driver' field name
+    if (mxdriverId !== undefined) updateData.mxdriverId = mxdriverId; // Fix: use 'mxdriverId' field name
     if (departureTime !== undefined) updateData.departureTime = departureTime;
     if (departureDays !== undefined) updateData.departureDay = departureDays; // Fix: use 'departureDay' field name
     if (capacity !== undefined) updateData.capacity = capacity;
     
     const bus = await Bus.findByIdAndUpdate(id, updateData, { 
       new: true,
-      populate: [{ path: "driver", select: "firstName lastName" }]
+      populate: [{ path: "driver", select: "firstName lastName" }, { path: "mxdriverId", select: "firstName lastName" }]
     });
     
     if (!bus) {

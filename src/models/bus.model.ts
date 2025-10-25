@@ -1,8 +1,41 @@
-import mongoose, { Schema, model, Document } from "mongoose";
+import mongoose, { Schema, model, Document, Mongoose } from "mongoose";
 import { commonOptions } from "./common/options";
-import { DaysEnums, GeoLocation, GeoLocationType, ObjectId, SeatLayout, SeatLayoutType, SeatStatus, SeatType } from "./common/types";
+import { DaysEnums, GeoLocation, GeoLocationType, ObjectId, SeatLayoutType, SeatStatus, SeatType } from "./common/types";
 
 // Interface definition
+export interface BookedDateCount {
+  date: Date;
+  count: number;
+}
+export interface DepartureDate {
+  date: Date;
+  userId: ObjectId;
+}
+export interface SeatBooking {
+  departureDate: Date;
+  userId?: ObjectId;
+  bookingId?: ObjectId;
+  status: string;
+  heldAt?: Date;
+  expiresAt?: Date;
+}
+
+export interface Seat {
+  seatLabel: string;
+  seatIndex: number;
+  type: string;
+  status: string;
+  departureDateBookings: SeatBooking[];
+  isAvailable: boolean;
+  userId?: ObjectId;
+  meta?: any;
+}
+
+export interface SeatLayout {
+  type: string;
+  seats: Seat[];
+}
+
 export interface IBus extends Document {
   description?: string;
   serialNumber: string;
@@ -21,12 +54,16 @@ export interface IBus extends Document {
   office?: ObjectId;
   driver?: ObjectId;
   departureDay?: DaysEnums[];
+  departureDate?: DepartureDate[];
   departureTime?: Date;
   totalBookedSeats: number;
   passengerOnBoarded: number;
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
+  mxdriverId?: ObjectId;
+  onBoardedDateCount?: BookedDateCount[];
+  bookedDateCount: BookedDateCount[];
 }
 
 // Schema definition
@@ -38,6 +75,7 @@ const BusSchema = new Schema<IBus>(
       index:true,
       unique:true,
     },
+    mxdriverId:  { type: Schema.Types.ObjectId, ref: "Auth", default:null }, // driver user id
     description: {type:String, default:null},
     serialNumber: {
       type: String,
@@ -75,6 +113,18 @@ const BusSchema = new Schema<IBus>(
             enum: SeatStatus,
             default: SeatStatus.AVAILABLE,
           },
+          departureDateBookings: [{
+            departureDate: { type: Date, required: true },
+            userId: { type: Schema.Types.ObjectId, ref: "User" },
+            bookingId: { type: Schema.Types.ObjectId, ref: "Passenger" },
+            status: {
+              type: String,
+              enum: Object.values(SeatStatus),
+              default: SeatStatus.AVAILABLE,
+            },
+            heldAt: { type: Date, default: null },
+            expiresAt: { type: Date, default: null }
+          }],
           isAvailable: { type: Boolean, default: true },
           userId: { type: Schema.Types.ObjectId, ref: "User", default:null },
           // you can store geometry for mapping seat positions in UI
@@ -91,6 +141,8 @@ const BusSchema = new Schema<IBus>(
     driver: { type: Schema.Types.ObjectId, ref: "Auth", default:null }, // driver user id
     departureDay: [{type:String, enum: DaysEnums, default:null}],
     departureTime: {type:Date, default:null},
+    bookedDateCount: {type:Schema.Types.Mixed, default:null},
+    onBoardedDateCount: {type:Schema.Types.Mixed, default:null},
     totalBookedSeats: {type:Number, default:0},
     passengerOnBoarded: {type:Number, default:0},
   },

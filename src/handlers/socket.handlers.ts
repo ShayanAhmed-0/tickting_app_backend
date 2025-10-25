@@ -1,7 +1,9 @@
 import { Server as SocketIOServer } from 'socket.io';
 import seatBookingService from '../services/seatBooking.service';
+import { departureDateSeatService } from '../services/departure-date-seat.service';
 import { SocketData, SeatStatusChangeEvent } from '../config/socket';
 import { redis, RedisKeys } from '../config/redis';
+import RouteModel from '../models/route.model';
 
 /**
  * Socket.io event handlers for real-time seat booking using Route model
@@ -44,7 +46,7 @@ export class SocketHandlers {
    */
   private async cleanupExpiredHoldsForRoute(routeId: string): Promise<void> {
     try {
-      // Get all hold keys for this route
+      // Get all hold keys for this route (legacy and new format)
       const holdKeys = await redis.keys(`hold:${routeId}:*`);
       
       for (const holdKey of holdKeys) {
@@ -55,14 +57,17 @@ export class SocketHandlers {
           
           // Check if hold is expired
           if (Date.now() > hold.expiresAt) {
-            // Extract seat label from hold key
-            const seatLabel = holdKey.split(':')[2];
+            // Extract seat label and departure date from hold key
+            const keyParts = holdKey.split(':');
+            const seatLabel = keyParts[2];
+            const departureDate = keyParts[3]; // May be undefined for legacy keys
             
             // Emit seat expired event
             this.io.to(`route:${routeId}`).emit('seat:expired', {
               seatLabel,
               routeId,
               userId: hold.userId,
+              departureDate: departureDate,
               expiredAt: new Date().toISOString()
             });
             
@@ -71,10 +76,39 @@ export class SocketHandlers {
               routeId,
               seatLabel,
               status: 'available',
-              userId: hold.userId
+              userId: hold.userId,
+              departureDate: departureDate
             });
             
-            console.log(`🕒 Seat ${seatLabel} expired for user ${hold.userId} in route ${routeId}`);
+            // Also emit to date-specific room if departure date exists
+            if (departureDate) {
+              this.io.to(`route:${routeId}:${departureDate}`).emit('seat:status:changed', {
+                routeId,
+                seatLabel,
+                status: 'available',
+                userId: hold.userId,
+                departureDate: departureDate
+              });
+            }
+            
+            console.log(`🕒 Seat ${seatLabel} expired for user ${hold.userId} in route ${routeId}${departureDate ? ` on ${departureDate}` : ''}`);
+          }
+        }
+      }
+      
+      // Also cleanup departure date-specific holds from bus-specific keys
+      const route = await RouteModel.findById(routeId);
+      if (route) {
+        const busHoldKeys = await redis.keys(`bus:${route.bus}:holds:*`);
+        for (const holdKey of busHoldKeys) {
+          const holds = await redis.hgetall(holdKey);
+          const currentTime = Date.now();
+          
+          for (const [seatLabel, holdDataStr] of Object.entries(holds)) {
+            const holdData = JSON.parse(holdDataStr);
+            if (currentTime > holdData.expiresAt) {
+              await redis.hdel(holdKey, seatLabel);
+            }
           }
         }
       }
@@ -95,9 +129,15 @@ export class SocketHandlers {
       // Get all active route rooms
       const rooms = Array.from(this.io.sockets.adapter.rooms.keys())
         .filter(room => room.startsWith('route:'))
-        .map(room => room.replace('route:', ''));
+        .map(room => {
+          const parts = room.replace('route:', '').split(':');
+          return { routeId: parts[0], date: parts[1] };
+        });
 
-      for (const routeId of rooms) {
+      // Get unique route IDs
+      const uniqueRouteIds = [...new Set(rooms.map(r => r.routeId))];
+
+      for (const routeId of uniqueRouteIds) {
         // Get all hold keys for this route
         const holdKeys = await redis.keys(`hold:${routeId}:*`);
         
@@ -109,14 +149,17 @@ export class SocketHandlers {
             
             // Check if hold is expired
             if (Date.now() > hold.expiresAt) {
-              // Extract seat label from hold key
-              const seatLabel = holdKey.split(':')[2];
+              // Extract seat label and departure date from hold key
+              const keyParts = holdKey.split(':');
+              const seatLabel = keyParts[2];
+              const departureDate = keyParts[3]; // May be undefined for legacy keys
               
               // Emit seat expired event
               this.io.to(`route:${routeId}`).emit('seat:expired', {
                 seatLabel,
                 routeId,
                 userId: hold.userId,
+                departureDate: departureDate,
                 expiredAt: new Date().toISOString()
               });
               
@@ -125,11 +168,37 @@ export class SocketHandlers {
                 routeId,
                 seatLabel,
                 status: 'available',
-                userId: hold.userId
+                userId: hold.userId,
+                departureDate: departureDate
               });
               
-              console.log(`🕒 Seat ${seatLabel} expired for user ${hold.userId} in route ${routeId}`);
+              // Also emit to date-specific room if departure date exists
+              if (departureDate) {
+                this.io.to(`route:${routeId}:${departureDate}`).emit('seat:status:changed', {
+                  routeId,
+                  seatLabel,
+                  status: 'available',
+                  userId: hold.userId,
+                  departureDate: departureDate
+                });
+              }
+              
+              console.log(`🕒 Seat ${seatLabel} expired for user ${hold.userId} in route ${routeId}${departureDate ? ` on ${departureDate}` : ''}`);
             }
+          }
+        }
+      }
+      
+      // Cleanup bus-specific holds
+      const busHoldKeys = await redis.keys(`bus:*:holds:*`);
+      for (const holdKey of busHoldKeys) {
+        const holds = await redis.hgetall(holdKey);
+        const currentTime = Date.now();
+        
+        for (const [seatLabel, holdDataStr] of Object.entries(holds)) {
+          const holdData = JSON.parse(holdDataStr);
+          if (currentTime > holdData.expiresAt) {
+            await redis.hdel(holdKey, seatLabel);
           }
         }
       }
@@ -157,7 +226,7 @@ export class SocketHandlers {
       // ----------------------------------------
       
       // Join route room with acknowledgment
-      socket.on('join:route', (data: { routeId: string }, ack: Function) => {
+      socket.on('join:route', (data: { routeId: string,date:string }, ack: Function) => {
         if (typeof ack !== 'function') {
           console.error('join:route event called without acknowledgment function');
           return;
@@ -175,7 +244,7 @@ export class SocketHandlers {
       });
       
       // Get seat availability with acknowledgment
-      socket.on('seats:get', (data: { routeId: string }, ack: Function) => {
+      socket.on('seats:get', (data: { routeId: string; departureDate?: string }, ack: Function) => {
         if (typeof ack !== 'function') {
           console.error('seats:get event called without acknowledgment function');
           return;
@@ -188,7 +257,7 @@ export class SocketHandlers {
       // ----------------------------------------
       
       // Hold seat with acknowledgment
-      socket.on('seat:hold', (data: { busId: string,routeId: string; seatLabel: string }, ack: Function) => {
+      socket.on('seat:hold', (data: { busId: string, routeId: string; seatLabel: string; departureDate?: string }, ack: Function) => {
         if (typeof ack !== 'function') {
           console.error('seat:hold event called without acknowledgment function');
           return;
@@ -197,12 +266,21 @@ export class SocketHandlers {
       });
       
       // Release seat with acknowledgment
-      socket.on('seat:release', (data: {busId: string, routeId: string; seatLabel: string }, ack: Function) => {
+      socket.on('seat:release', (data: { busId: string, routeId: string; seatLabel: string; departureDate?: string }, ack: Function) => {
         if (typeof ack !== 'function') {
           console.error('seat:release event called without acknowledgment function');
           return;
         }
         this.handleSeatRelease(socket, data, ack);
+      });
+
+      // Release seat with departure date support
+      socket.on('seat:release:date', (data: {busId: string, routeId: string; seatLabel: string; departureDate?: string }, ack: Function) => {
+        if (typeof ack !== 'function') {
+          console.error('seat:release:date event called without acknowledgment function');
+          return;
+        }
+        this.handleSeatReleaseForDate(socket, data, ack);
       });
       
       // Get current holds with acknowledgment
@@ -319,7 +397,7 @@ export class SocketHandlers {
   /**
    * Handle joining a route room with acknowledgment
    */
-  private async handleJoinRoute(socket: any, data: { routeId: string }, ack: Function) {
+  private async handleJoinRoute(socket: any, data: { routeId: string, date?: string }, ack: Function) {
     try {
       const { routeId } = data;
       const socketData = socket.data as SocketData;
@@ -341,7 +419,14 @@ export class SocketHandlers {
       });
       
       // Join new route room
-      socket.join(`route:${routeId}`);
+      //v1
+    
+      //v2
+      if (data.date) {
+        socket.join(`route:${routeId}:${data.date}`);
+      }else{
+        socket.join(`route:${routeId}`);
+      }
       socketData.currentTrip = routeId; // Keep field name for compatibility
       
       console.log(`User ${socketData.userId} joined route ${routeId}`);
@@ -350,8 +435,11 @@ export class SocketHandlers {
       await this.cleanupExpiredHoldsForRoute(routeId);
       await seatBookingService.cleanupInconsistentSeats(routeId);
       
+      // Get departure date if provided
+      const departureDate = data.date ? new Date(data.date) : undefined;
+      
       // Send acknowledgment with seat availability
-      const seats = await seatBookingService.getSeatAvailability(routeId, socketData.userId);
+      const seats = await seatBookingService.getSeatAvailability(routeId, socketData.userId, departureDate);
       
       ack({
         success: true,
@@ -462,7 +550,7 @@ export class SocketHandlers {
   /**
    * Handle getting seat availability with acknowledgment
    */
-  private async handleGetSeats(socket: any, data: { routeId: string }, ack: Function) {
+  private async handleGetSeats(socket: any, data: { routeId: string; departureDate?: string }, ack: Function) {
     try {
       const { routeId } = data;
       
@@ -480,7 +568,15 @@ export class SocketHandlers {
       await this.cleanupExpiredHoldsForRoute(routeId);
       await seatBookingService.cleanupInconsistentSeats(routeId);
       
-      const seats = await seatBookingService.getSeatAvailability(routeId, socketData.userId);
+      // Get departure date from data if provided
+      const departureDate = data.departureDate ? new Date(data.departureDate) : undefined;
+      
+      console.log(`🔍 Getting seats for route ${routeId}, departure date: ${departureDate ? departureDate.toISOString().split('T')[0] : 'none'}, userId: ${socketData.userId}`);
+      
+      // Use the unified seat booking service which now supports departure dates
+      const seats = departureDate 
+        ? await seatBookingService.getSeatAvailability(routeId, socketData.userId, departureDate)
+        : await seatBookingService.getSeatAvailability(routeId, socketData.userId);
       
       ack({
         success: true,
@@ -505,7 +601,7 @@ export class SocketHandlers {
   /**
    * Handle seat hold with acknowledgment
    */
-  private async handleSeatHold(socket: any, data: { busId: string, routeId: string; seatLabel: string }, ack: Function) {
+  private async handleSeatHold(socket: any, data: { busId: string, routeId: string; seatLabel: string; departureDate?: string }, ack: Function) {
     try {
       const { busId, routeId, seatLabel } = data;
       const socketData = socket.data as SocketData;
@@ -519,11 +615,13 @@ export class SocketHandlers {
       }
       
       // Attempt to hold the seat
-      const result = await seatBookingService.holdSeat(busId, routeId, seatLabel, socketData.userId);
+      const departureDate = data.departureDate ? new Date(data.departureDate) : new Date();
+      const result = await seatBookingService.holdSeatForDate(busId, routeId, seatLabel, socketData.userId, departureDate);
       
       if (result.success) {
-        // Track held seat
-        socketData.heldSeats.add(`${routeId}:${seatLabel}`);
+        // Track held seat with departure date
+        const departureDateStr = departureDate.toISOString().split('T')[0];
+        socketData.heldSeats.add(`${routeId}:${seatLabel}:${departureDateStr}`);
         
         // Send acknowledgment
         ack({
@@ -548,7 +646,17 @@ export class SocketHandlers {
           userId: socketData.userId
         };
         
-        this.io.to(`route:${routeId}`).emit('seat:status:changed', statusChangeEvent);
+        // Emit to general route room
+        this.io.to(`route:${routeId}`).emit('seat:status:changed', {
+          ...statusChangeEvent,
+          departureDate: departureDateStr
+        });
+        
+        // Emit to date-specific route room
+        this.io.to(`route:${routeId}:${departureDateStr}`).emit('seat:status:changed', {
+          ...statusChangeEvent,
+          departureDate: departureDateStr
+        });
         
         // Set up auto-release timer
         const timeUntilExpiry = (result.expiresAt || 0) - Date.now();
@@ -592,11 +700,11 @@ export class SocketHandlers {
   }
   
   /**
-   * Handle seat release with acknowledgment
+   * Handle seat release with departure date support
    */
-  private async handleSeatRelease(socket: any, data: { busId: string, routeId: string; seatLabel: string }, ack: Function) {
+  private async handleSeatReleaseForDate(socket: any, data: { busId: string, routeId: string; seatLabel: string; departureDate?: string }, ack: Function) {
     try {
-      const { busId, routeId, seatLabel } = data;
+      const { busId, routeId, seatLabel, departureDate } = data;
       const socketData = socket.data as SocketData;
       
       if (!routeId || !seatLabel) {
@@ -607,10 +715,98 @@ export class SocketHandlers {
         });
       }
       
-      const result = await seatBookingService.releaseSeat(busId, routeId, seatLabel, socketData.userId);
+      const departureDateObj = departureDate ? new Date(departureDate) : new Date();
+      
+      // Attempt to release the seat
+      const result = await seatBookingService.releaseSeatHoldForDate(busId, routeId, seatLabel, socketData.userId, departureDateObj);
       
       if (result.success) {
+        // Remove from user holds tracking
+        const departureDateStr = departureDateObj.toISOString().split('T')[0];
+        socketData.heldSeats.delete(`${routeId}:${seatLabel}:${departureDateStr}`);
+        
+        // Send acknowledgment
+        ack({
+          success: true,
+          message: `Seat ${seatLabel} Released Successfully`,
+          data: {
+            routeId,
+            seatLabel,
+            departureDate: departureDateStr,
+            status: 'available',
+            timestamp: new Date().toISOString()
+          }
+        });
+        
+        // Broadcast to all users in the route room (real-time update)
+        this.io.to(`route:${routeId}`).emit('seat:status:changed', {
+          routeId: routeId,
+          seatLabel,
+          status: 'available',
+          userId: socketData.userId,
+          departureDate: departureDateStr
+        });
+        
+        // Also emit to date-specific room
+        this.io.to(`route:${routeId}:${departureDateStr}`).emit('seat:status:changed', {
+          routeId: routeId,
+          seatLabel,
+          status: 'available',
+          userId: socketData.userId,
+          departureDate: departureDateStr
+        });
+        
+      } else {
+        ack({
+          success: false,
+          error: result.reason || 'Failed to release seat',
+          code: 'RELEASE_FAILED'
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error releasing seat for date:', error);
+      ack({
+        success: false,
+        error: 'Failed to release seat',
+        code: 'RELEASE_ERROR',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
+   * Handle seat release with acknowledgment
+   */
+  private async handleSeatRelease(socket: any, data: { busId: string, routeId: string; seatLabel: string, departureDate?: string }, ack: Function) {
+    try {
+      const { busId, routeId, seatLabel, departureDate } = data;
+      const socketData = socket.data as SocketData;
+      
+      if (!routeId || !seatLabel) {
+        return ack({
+          success: false,
+          error: 'Route ID and Seat Label required',
+          code: 'INVALID_DATA'
+        });
+      }
+      
+      // Use date-specific release if date provided, otherwise legacy release
+      const departureDateObj = departureDate ? new Date(departureDate) : undefined;
+      const result = await seatBookingService.releaseSeat(busId, routeId, seatLabel, socketData.userId, departureDateObj);
+      
+      if (result.success) {
+        // Remove from user holds tracking (support both old and new format)
         socketData.heldSeats.delete(`${routeId}:${seatLabel}`);
+        // Also try to remove with departure date format
+        if (departureDate) {
+          const departureDateStr = new Date(departureDate).toISOString().split('T')[0];
+          socketData.heldSeats.delete(`${routeId}:${seatLabel}:${departureDateStr}`);
+        } else {
+          // Try current date as fallback
+          const currentDateStr = new Date().toISOString().split('T')[0];
+          socketData.heldSeats.delete(`${routeId}:${seatLabel}:${currentDateStr}`);
+        }
         
         ack({
           success: true,
@@ -623,16 +819,31 @@ export class SocketHandlers {
         });
         
         // Get updated seat status for all users in the room
-        const updatedSeats = await seatBookingService.getSeatAvailability(routeId);
+        const updatedSeats = departureDate 
+          ? await seatBookingService.getSeatAvailability(routeId, socketData.userId, new Date(departureDate))
+          : await seatBookingService.getSeatAvailability(routeId);
         
         // Broadcast to all users with updated seat status
-        this.io.to(`route:${routeId}`).emit('seat:status:changed', {
-          routeId: routeId, // Keep field name for compatibility
-          seatLabel,
-          status: updatedSeats[seatLabel] || 'available',
-          userId: socketData.userId
-        });
-        
+        if(departureDate){
+          // Broadcast to both general and date-specific rooms
+      
+          
+          this.io.to(`route:${routeId}:${departureDate}`).emit('seat:status:changed', {
+            routeId: routeId,
+            seatLabel,
+            status: 'available',
+            userId: socketData.userId,
+            departureDate: departureDate
+          });
+        }else{
+          this.io.to(`route:${routeId}`).emit('seat:status:changed', {
+            routeId: routeId,
+            seatLabel,
+            status: 'available',
+            userId: socketData.userId,
+            departureDate: departureDate
+          });
+        }
       } else {
         ack({
           success: false,

@@ -7,6 +7,7 @@ import { BookingStatus, PaymentStatus, SeatStatus } from '../models/common/types
 import { SEAT_HOLD_DURATION } from '../config/environment';
 import BusModel from '../models/bus.model';
 import mongoose from 'mongoose';
+import { departureDateSeatService } from './departure-date-seat.service';
 
 /**
  * Service for managing seat bookings with real-time holds using Route model
@@ -16,18 +17,21 @@ export class SeatBookingService {
   /**
    * Get seat availability for a route from Redis cache or database
    */
-  async getSeatAvailability(routeId: string, userId?: string): Promise<Record<string, string>> {
+  async getSeatAvailability(routeId: string, userId?: string, departureDate?: Date): Promise<Record<string, string>> {
     try {
       // Always fetch fresh data from database to ensure we get all seats
       // and current hold status
-      const seats = await this.fetchSeatsFromDatabase(routeId, userId);
+      const seats = await this.fetchSeatsFromDatabase(routeId, userId, departureDate);
       
       // Update cache with fresh data
+      const departureDateStr = departureDate ? departureDate.toISOString().split('T')[0] : undefined;
+      const cacheKey = RedisKeys.tripSeats(routeId, departureDateStr);
+      
       const pipeline = redis.pipeline();
       for (const [seatLabel, status] of Object.entries(seats)) {
-        pipeline.hset(RedisKeys.tripSeats(routeId), seatLabel, status);
+        pipeline.hset(cacheKey, seatLabel, status);
       }
-      pipeline.expire(RedisKeys.tripSeats(routeId), 300);
+      pipeline.expire(cacheKey, 300);
       await pipeline.exec();
       
       return seats;
@@ -38,7 +42,74 @@ export class SeatBookingService {
   }
 
   /**
-   * Hold a seat with distributed lock mechanism
+   * Hold a seat for a specific departure date with distributed lock mechanism
+   */
+  async holdSeatForDate(busId: string, routeId: string, seatLabel: string, userId: string, departureDate: Date): Promise<{ success: boolean; reason?: string; expiresAt?: number; extended?: boolean }> {
+    const departureDateStr = departureDate.toISOString().split('T')[0];
+    const lockKey = RedisKeys.tripLock(routeId, seatLabel, departureDateStr);
+    const holdKey = RedisKeys.seatHold(routeId, seatLabel, departureDateStr);
+    
+    try {
+      // Try to acquire lock using SET NX (atomic operation) - increased timeout to 5 seconds
+      const locked = await (redis as any).set(lockKey, '1', 'NX', 'EX', 5);
+      
+      if (!locked) {
+        return { success: false, reason: 'seat_locked' };
+      }
+      
+      // Check if seat is available for this departure date using the departure date service
+      const availability = await departureDateSeatService.isSeatAvailableForDate(busId, seatLabel, departureDate);
+      
+      if (!availability.available) {
+        // Check if it's held by the same user (allow extending hold)
+        if (availability.currentBooking && 
+            availability.currentBooking.userId.toString() === userId &&
+            availability.currentBooking.status === SeatStatus.SELECTED) {
+          // Same user, extend the hold
+          await departureDateSeatService.holdSeatForDate(busId, seatLabel, departureDate, userId, 15);
+          return { success: true, extended: true };
+        } else {
+          return { success: false, reason: availability.reason || 'seat_not_available' };
+        }
+      }
+      
+      // Hold the seat for the departure date
+      const holdResult = await departureDateSeatService.holdSeatForDate(busId, seatLabel, departureDate, userId, 15);
+      
+      if (holdResult.success) {
+        // Also store in Redis for real-time updates (legacy support)
+        const holdData = {
+          userId,
+          seatLabel,
+          busId,
+          routeId,
+          departureDate: departureDate.toISOString(),
+          expiresAt: holdResult.expiresAt?.getTime() || (Date.now() + 15 * 60 * 1000)
+        };
+        
+        await redis.setex(holdKey, 900, JSON.stringify(holdData)); // 15 minutes
+        
+        // Add to user holds set
+        await redis.sadd(RedisKeys.userHolds(userId), `${routeId}:${seatLabel}:${departureDate.toISOString().split('T')[0]}`);
+        
+        return { 
+          success: true, 
+          expiresAt: holdResult.expiresAt?.getTime() || (Date.now() + 15 * 60 * 1000)
+        };
+      } else {
+        return { success: false, reason: holdResult.reason };
+      }
+    } catch (error) {
+      console.error('Error holding seat for date:', error);
+      return { success: false, reason: 'database_error' };
+    } finally {
+      // Always release the lock
+      await redis.del(lockKey);
+    }
+  }
+
+  /**
+   * Hold a seat with distributed lock mechanism (legacy method - now uses departure date service)
    */
   async holdSeat(busId: string, routeId: string, seatLabel: string, userId: string): Promise<{ success: boolean; reason?: string; expiresAt?: number; extended?: boolean }> {
     const lockKey = RedisKeys.tripLock(routeId, seatLabel);
@@ -130,9 +201,62 @@ export class SeatBookingService {
   }
 
   /**
-   * Release a seat hold
+   * Release a seat hold for a specific departure date
    */
-  async releaseSeat(busId: string, routeId: string, seatLabel: string, userId: string): Promise<{ success: boolean; reason?: string }> {
+  async releaseSeatHoldForDate(busId: string, routeId: string, seatLabel: string, userId: string, departureDate: Date): Promise<{ success: boolean; reason?: string }> {
+    try {
+      const departureDateStr = departureDate.toISOString().split('T')[0];
+      const holdKey = RedisKeys.seatHold(routeId, seatLabel, departureDateStr);
+      const lockKey = RedisKeys.tripLock(routeId, seatLabel, departureDateStr);
+      
+      // Try to acquire lock
+      const locked = await (redis as any).set(lockKey, '1', 'NX', 'EX', 5);
+      
+      if (!locked) {
+        return { success: false, reason: 'seat_locked' };
+      }
+      
+      try {
+        // Release hold using departure date service
+        const releaseResult = await departureDateSeatService.releaseSeatHold(busId, seatLabel, departureDate, userId);
+        
+        if (releaseResult.success) {
+          // Clean up Redis keys
+          await redis.del(holdKey);
+          await redis.srem(RedisKeys.userHolds(userId), `${routeId}:${seatLabel}:${departureDateStr}`);
+          
+          // Invalidate seat availability cache for this route
+          const cacheKey = RedisKeys.tripSeats(routeId, departureDateStr);
+          await redis.del(cacheKey);
+          console.log(`🗑️  Invalidated cache for route ${routeId} on ${departureDateStr}`);
+          
+          return { success: true };
+        } else {
+          return releaseResult;
+        }
+      } finally {
+        // Always release the lock
+        await redis.del(lockKey);
+      }
+    } catch (error) {
+      console.error('Error releasing seat hold for date:', error);
+      return { success: false, reason: 'database_error' };
+    }
+  }
+
+  /**
+   * Release a seat hold (legacy method - now routes to date-specific method if date provided)
+   */
+  async releaseSeat(busId: string, routeId: string, seatLabel: string, userId: string, departureDate?: Date): Promise<{ success: boolean; reason?: string }> {
+    console.log(`🔓 releaseSeat called: busId=${busId}, routeId=${routeId}, seatLabel=${seatLabel}, userId=${userId}, departureDate=${departureDate ? departureDate.toISOString().split('T')[0] : 'none'}`);
+    
+    // If departure date is provided, use the date-specific release method
+    if (departureDate) {
+      console.log(`📅 Using date-specific release for ${departureDate.toISOString().split('T')[0]}`);
+      return this.releaseSeatHoldForDate(busId, routeId, seatLabel, userId, departureDate);
+    }
+    
+    // Legacy release (without departure date)
     const holdKey = RedisKeys.seatHold(routeId, seatLabel);
     const existingHold = await redis.get(holdKey);
     
@@ -158,7 +282,7 @@ export class SeatBookingService {
       // Check if seat is held by this user in database
       if (seat.status === SeatStatus.SELECTED && seat.userId && seat.userId.toString() === userId) {
         // Release the seat from database
-        seat.userId = null;
+        seat.userId = undefined;
         seat.isAvailable = true;
         seat.status = SeatStatus.AVAILABLE;
         await bus.save();
@@ -172,6 +296,8 @@ export class SeatBookingService {
     
     // Delete hold from Redis
     await redis.del(holdKey);
+    
+    // Remove from user holds set
     await redis.srem(RedisKeys.userHolds(userId), `${routeId}:${seatLabel}`);
     
     // Update seat status in database
@@ -183,10 +309,12 @@ export class SeatBookingService {
     if (!seat) {
       return { success: false, reason: 'seat_not_found' };
     }
-    seat.userId = null;
+    seat.userId = undefined;
     seat.isAvailable = true;
     seat.status = SeatStatus.AVAILABLE;
     await bus.save();
+    
+    // Update cache
     await redis.hset(RedisKeys.tripSeats(routeId), seatLabel, SeatStatus.AVAILABLE);
     
     return { success: true };
@@ -264,9 +392,11 @@ export class SeatBookingService {
   }
 
   /**
-   * Fetch seat data from database based on route's bus
+   * Fetch seat data from database based on route's bus (with optional departure date)
    */
-  private async fetchSeatsFromDatabase(routeId: string, userId?: string): Promise<Record<string, string>> {
+  private async fetchSeatsFromDatabase(routeId: string, userId?: string, departureDate?: Date): Promise<Record<string, string>> {
+    console.log(`🔍 fetchSeatsFromDatabase called with routeId: ${routeId}, userId: ${userId}, departureDate: ${departureDate ? departureDate.toISOString().split('T')[0] : 'none'}`);
+    
     const route = await Route.findById(routeId).populate('bus');
     if (!route) {
       throw new Error('Route not found');
@@ -285,25 +415,82 @@ export class SeatBookingService {
     if (bus.seatLayout && bus.seatLayout.seats) {
       bus.seatLayout.seats.forEach((seat: any) => {
         if (seat.seatLabel) {
-          // Check database seat status first
-          if (seat.status === SeatStatus.BOOKED) {
-            seats[seat.seatLabel] = SeatStatus.BOOKED;
-          } else if (seat.status === SeatStatus.SELECTED) {
-            // Check if this seat is selected by current user or someone else
-            if (userId && seat.userId && seat.userId.toString() === userId) {
-              seats[seat.seatLabel] = SeatStatus.SELECTED;
-            } else {
-              seats[seat.seatLabel] = SeatStatus.HELD;
+          // If departure date is provided, use departure date-specific logic
+          if (departureDate) {
+            // Check if seat has bookings for this specific date
+            let booking = null;
+            if (seat.departureDateBookings && seat.departureDateBookings.length > 0) {
+              booking = seat.departureDateBookings.find((booking: any) => {
+                const bookingDate = new Date(booking.departureDate);
+                return bookingDate.toDateString() === departureDate.toDateString();
+              });
             }
-          } else if (seat.status === SeatStatus.HELD) {
-            // Check if this seat is held by current user or someone else
-            if (userId && seat.userId && seat.userId.toString() === userId) {
-              seats[seat.seatLabel] = SeatStatus.SELECTED;
+            
+            if (booking) {
+              const bookingStatus = booking.status?.toLowerCase();
+              const bookingDateStr = new Date(booking.departureDate).toISOString().split('T')[0];
+              const expiresAt = booking.expiresAt ? new Date(booking.expiresAt).toISOString() : 'no expiry';
+              const now = new Date().toISOString();
+              
+              console.log(`📌 Seat ${seat.seatLabel} has booking for ${departureDate.toISOString().split('T')[0]}: status=${bookingStatus}, userId=${booking.userId}, expiresAt=${expiresAt}, now=${now}`);
+              
+              // Check if hold is expired
+              if (bookingStatus === 'selected' && booking.expiresAt) {
+                const isExpired = new Date() > new Date(booking.expiresAt);
+                console.log(`⏱️  Comparing: now(${now}) > expiresAt(${expiresAt}) = ${isExpired}`);
+                
+                if (isExpired) {
+                  seats[seat.seatLabel] = SeatStatus.AVAILABLE;
+                  console.log(`⏰ Seat ${seat.seatLabel} hold expired, marked as available`);
+                } else {
+                  if (userId && booking.userId?.toString() === userId) {
+                    seats[seat.seatLabel] = SeatStatus.SELECTED;
+                    console.log(`✅ Seat ${seat.seatLabel} selected by current user (${userId})`);
+                  } else {
+                    seats[seat.seatLabel] = SeatStatus.HELD;
+                    console.log(`🔒 Seat ${seat.seatLabel} held by another user (booking.userId=${booking.userId}, current=${userId})`);
+                  }
+                }
+              } else if (bookingStatus === 'booked') {
+                seats[seat.seatLabel] = SeatStatus.BOOKED;
+                console.log(`🎫 Seat ${seat.seatLabel} permanently booked`);
+              } else if (bookingStatus === 'selected' && !booking.expiresAt) {
+                // SELECTED but no expiresAt - this is a problem!
+                console.log(`⚠️  WARNING: Seat ${seat.seatLabel} has SELECTED status but no expiresAt field - marking as HELD`);
+                if (userId && booking.userId?.toString() === userId) {
+                  seats[seat.seatLabel] = SeatStatus.SELECTED;
+                } else {
+                  seats[seat.seatLabel] = SeatStatus.HELD;
+                }
+              } else {
+                seats[seat.seatLabel] = SeatStatus.AVAILABLE;
+                console.log(`❓ Seat ${seat.seatLabel} has unknown status: ${bookingStatus}, marked as available`);
+              }
             } else {
-              seats[seat.seatLabel] = SeatStatus.HELD;
+              // No booking for this date, seat is available
+              seats[seat.seatLabel] = SeatStatus.AVAILABLE;
             }
           } else {
-            seats[seat.seatLabel] = SeatStatus.AVAILABLE;
+            // Legacy: Check database seat status first (no date filtering)
+            if (seat.status === SeatStatus.BOOKED) {
+              seats[seat.seatLabel] = SeatStatus.BOOKED;
+            } else if (seat.status === SeatStatus.SELECTED) {
+              // Check if this seat is selected by current user or someone else
+              if (userId && seat.userId && seat.userId.toString() === userId) {
+                seats[seat.seatLabel] = SeatStatus.SELECTED;
+              } else {
+                seats[seat.seatLabel] = SeatStatus.HELD;
+              }
+            } else if (seat.status === SeatStatus.HELD) {
+              // Check if this seat is held by current user or someone else
+              if (userId && seat.userId && seat.userId.toString() === userId) {
+                seats[seat.seatLabel] = SeatStatus.SELECTED;
+              } else {
+                seats[seat.seatLabel] = SeatStatus.HELD;
+              }
+            } else {
+              seats[seat.seatLabel] = SeatStatus.AVAILABLE;
+            }
           }
         }
       });
@@ -313,28 +500,32 @@ export class SeatBookingService {
     }
     
     // Mark booked seats as booked from existing bookings (this overrides database status)
-    existingBookings.forEach(booking => {
-      booking.passengers.forEach((passenger: any) => {
-        if (passenger.seatLabel) {
-          seats[passenger.seatLabel] = SeatStatus.BOOKED;
-        }
+    if (!departureDate) {
+      existingBookings.forEach(booking => {
+        booking.passengers.forEach((passenger: any) => {
+          if (passenger.seatLabel) {
+            seats[passenger.seatLabel] = SeatStatus.BOOKED;
+          }
+        });
       });
-    });
-    console.log(`📚 Found ${existingBookings.length} existing bookings for route ${routeId}`);
+      console.log(`📚 Found ${existingBookings.length} existing bookings for route ${routeId}`);
+    }
     
     // Check Redis for held seats and update their status (this takes precedence over database)
     let heldCount = 0;
     let selectedCount = 0;
-    for (const seatLabel of Object.keys(seats)) {
-      const holdKey = RedisKeys.seatHold(routeId, seatLabel);
-      const holdData = await redis.get(holdKey);
+    
+    if (departureDate) {
+      // Check departure date-specific Redis holds
+      const departureDateStr = departureDate.toISOString().split('T')[0];
+      const holdKey = RedisKeys.departureDateHolds(bus._id.toString(), departureDateStr);
+      const redisHolds = await redis.hgetall(holdKey);
       
-      if (holdData) {
-        const hold = JSON.parse(holdData);
-        // Check if hold is still valid (not expired)
-        if (Date.now() < hold.expiresAt) {
+      for (const [seatLabel, holdDataStr] of Object.entries(redisHolds)) {
+        const holdData = JSON.parse(holdDataStr);
+        if (Date.now() < holdData.expiresAt) {
           // Differentiate between seats held by current user vs others
-          if (userId && hold.userId === userId) {
+          if (userId && holdData.userId === userId) {
             seats[seatLabel] = SeatStatus.SELECTED;
             selectedCount++;
           } else {
@@ -343,7 +534,31 @@ export class SeatBookingService {
           }
         } else {
           // Hold is expired, clean it up
-          await this.cleanupExpiredHold(hold, holdKey);
+          await redis.hdel(holdKey, seatLabel);
+        }
+      }
+    } else {
+      // Legacy: Check general Redis holds
+      for (const seatLabel of Object.keys(seats)) {
+        const holdKey = RedisKeys.seatHold(routeId, seatLabel);
+        const holdData = await redis.get(holdKey);
+        
+        if (holdData) {
+          const hold = JSON.parse(holdData);
+          // Check if hold is still valid (not expired)
+          if (Date.now() < hold.expiresAt) {
+            // Differentiate between seats held by current user vs others
+            if (userId && hold.userId === userId) {
+              seats[seatLabel] = SeatStatus.SELECTED;
+              selectedCount++;
+            } else {
+              seats[seatLabel] = SeatStatus.HELD;
+              heldCount++;
+            }
+          } else {
+            // Hold is expired, clean it up
+            await this.cleanupExpiredHold(hold, holdKey);
+          }
         }
       }
     }
@@ -444,7 +659,7 @@ export class SeatBookingService {
           const seat = bus.seatLayout.seats.find((s: any) => s.seatLabel === hold.seatLabel);
           if (seat) {
             // Reset seat to available status in database
-            seat.userId = null;
+            seat.userId = undefined;
             seat.isAvailable = true;
             seat.status = SeatStatus.AVAILABLE;
             await bus.save();
@@ -485,7 +700,7 @@ export class SeatBookingService {
             
             // If Redis hold is expired but database shows seat as selected
             if (Date.now() > hold.expiresAt && seat.status === SeatStatus.SELECTED) {
-              seat.userId = null;
+              seat.userId = undefined;
               seat.isAvailable = true;
               seat.status = SeatStatus.AVAILABLE;
               hasChanges = true;
@@ -496,7 +711,7 @@ export class SeatBookingService {
           } else {
             // No Redis hold but database shows seat as selected (not booked)
             if (seat.status === SeatStatus.SELECTED && seat.status !== SeatStatus.BOOKED) {
-              seat.userId = null;
+              seat.userId = undefined;
               seat.isAvailable = true;
               seat.status = SeatStatus.AVAILABLE;
               hasChanges = true;
