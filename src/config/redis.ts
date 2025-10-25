@@ -24,10 +24,15 @@ export const subClient = pubClient.duplicate();
 
 // Redis key generators
 export const RedisKeys = {
-  seatHold: (routeId: string, seatLabel: string) => `hold:${routeId}:${seatLabel}`,
-  tripSeats: (routeId: string) => `seats:${routeId}`,
+  seatHold: (routeId: string, seatLabel: string, departureDate?: string) => 
+    departureDate ? `hold:${routeId}:${seatLabel}:${departureDate}` : `hold:${routeId}:${seatLabel}`,
+  tripSeats: (routeId: string, departureDate?: string) => 
+    departureDate ? `seats:${routeId}:${departureDate}` : `seats:${routeId}`,
   userHolds: (userId: string) => `user:holds:${userId}`,
-  tripLock: (routeId: string, seatLabel: string) => `lock:${routeId}:${seatLabel}`,
+  tripLock: (routeId: string, seatLabel: string, departureDate?: string) => 
+    departureDate ? `lock:${routeId}:${seatLabel}:${departureDate}` : `lock:${routeId}:${seatLabel}`,
+  departureDateSeats: (busId: string, departureDate: string) => `bus:${busId}:seats:${departureDate}`,
+  departureDateHolds: (busId: string, departureDate: string) => `bus:${busId}:holds:${departureDate}`,
 };
 
 // Connection logs

@@ -8,6 +8,7 @@ export const createBusSchema: ZodSchema<{
   serialNumber: string;
   isActive?: boolean;
   driverId?: string;
+  mxdriverId?: string;
   departureTime?: string;
   departureDays?: string[];
 }> = z.object({
@@ -32,6 +33,9 @@ export const createBusSchema: ZodSchema<{
   
   driverId: z.string()
     .regex(/^[0-9a-fA-F]{24}$/, "Driver ID must be a valid MongoDB ObjectId")
+    .optional(),
+  mxdriverId: z.string()
+    .regex(/^[0-9a-fA-F]{24}$/, "MX Driver ID must be a valid MongoDB ObjectId")
     .optional(),
   
   departureTime: z.string()
@@ -58,6 +62,7 @@ export const updateBusSchema: ZodSchema<{
   capacity?: number;
   isActive?: boolean;
   driverId?: string;
+  mxdriverId?: string;
   departureTime?: string;
   departureDays?: string[];
 }> = z.object({
@@ -78,6 +83,9 @@ export const updateBusSchema: ZodSchema<{
   isActive: z.boolean().optional(),
   driverId: z.string()
     .regex(/^[0-9a-fA-F]{24}$/, "Driver ID must be a valid MongoDB ObjectId")
+    .optional(),
+  mxdriverId: z.string()
+    .regex(/^[0-9a-fA-F]{24}$/, "MX Driver ID must be a valid MongoDB ObjectId")
     .optional(),
   departureTime: z.string()
     .datetime("Departure time must be a valid ISO datetime string")

@@ -7,6 +7,7 @@ import RouteModel from "../../models/route.model";
 import Destination from "../../models/destinations.model";
 import Bus from "../../models/bus.model";
 import helper from "../../helper";
+import { SeatStatus } from "../../models/tours.models";
 
 export const createRoute = async (req: Request, res: Response) => {
   try {
@@ -178,6 +179,55 @@ export const getRoutes = async (req: Request, res: Response) => {
     // Try pagination helper first
     const routes = await helper.PaginateHelper.customPaginate("routes", RouteModel as any, query, options);
     
+    // Helper function to check if a seat is booked for a specific date
+    const isSeatBookedForDate = (seat: any, targetDate: Date): boolean => {
+      if (!seat.departureDateBookings || seat.departureDateBookings.length === 0) {
+        return false;
+      }
+      
+      return seat.departureDateBookings.some((booking: any) => {
+        const bookingDate = new Date(booking.departureDate);
+        const queryDate = new Date(targetDate);
+        const bookingStatus = booking.status?.toLowerCase();
+        return bookingDate.toDateString() === queryDate.toDateString() && 
+               (bookingStatus === 'booked' || bookingStatus === 'selected');
+      });
+    };
+
+    // Helper function to get seat status for a specific date
+    const getSeatStatusForDate = (seat: any, targetDate: Date): string => {
+      if (!seat.departureDateBookings || seat.departureDateBookings.length === 0) {
+        return 'available';
+      }
+      
+      const booking = seat.departureDateBookings.find((booking: any) => {
+        const bookingDate = new Date(booking.departureDate);
+        const queryDate = new Date(targetDate);
+        return bookingDate.toDateString() === queryDate.toDateString();
+      });
+
+      if (!booking) {
+        return 'available';
+      }
+
+      // Normalize status to lowercase for comparison
+      const bookingStatus = booking.status?.toLowerCase();
+
+      // Check if hold is expired
+      if (bookingStatus === 'selected' && booking.expiresAt) {
+        if (new Date() > new Date(booking.expiresAt)) {
+          return 'available';
+        }
+        return 'selected';
+      }
+
+      if (bookingStatus === 'booked') {
+        return 'booked';
+      }
+
+      return 'available';
+    };
+    
     // Calculate available seats for each route
     const routesWithSeatInfo = Array.isArray(routes.routes) ? routes.routes.map((route: any) => {
       const routeObj = route.toObject ? route.toObject() : route;
@@ -185,16 +235,43 @@ export const getRoutes = async (req: Request, res: Response) => {
       if (routeObj.bus && routeObj.bus.seatLayout && routeObj.bus.seatLayout.seats) {
         const seats = routeObj.bus.seatLayout.seats;
         const totalSeats = seats.length;
-        const availableSeats = seats.filter((seat: any) => 
-          seat.status === 'available' && seat.isAvailable === true
-        ).length;
-        const bookedSeats = seats.filter((seat: any) => 
-          seat.status === 'booked'
-        ).length;
-        const heldSeats = seats.filter((seat: any) => 
-          seat.status === 'held' || seat.status === 'selected'
-        ).length;
+        
+        let availableSeats = 0;
+        let bookedSeats = 0;
+        let heldSeats = 0;
 
+        if (departureDate) {
+          // Filter seats based on departure date
+          const targetDate = new Date(departureDate as string);
+          
+          // Calculate seat counts for the specific date
+          seats.forEach((seat: any) => {
+            const seatStatus = getSeatStatusForDate(seat, targetDate);
+            
+            if (seatStatus === 'available') {
+              availableSeats++;
+            } else if (seatStatus === 'booked') {
+              bookedSeats++;
+            } else if (seatStatus === 'selected') {
+              heldSeats++;
+            }
+          });
+        } else {
+          // Without date filter, show general seat availability
+          availableSeats = seats.filter((seat: any) => 
+            seat.status === 'available' || seat.isAvailable === true
+          ).length;
+          
+          bookedSeats = seats.filter((seat: any) => 
+            seat.status === 'booked'
+          ).length;
+          
+          heldSeats = seats.filter((seat: any) => 
+            seat.status === 'held' || seat.status === 'selected'
+          ).length;
+        }
+
+        // Remove detailed seat layout from response to reduce payload size
         delete routeObj.bus.seatLayout;
 
         return {
@@ -204,6 +281,7 @@ export const getRoutes = async (req: Request, res: Response) => {
             available: availableSeats,
             booked: bookedSeats,
             held: heldSeats,
+            ...(departureDate && { departureDate: departureDate })
           }
         };
       }
@@ -271,6 +349,7 @@ export const getRoutes = async (req: Request, res: Response) => {
 export const getRouteById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const { date } = req.query;
     const populateOptions = [
       { path: "origin", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
       { path: "destination", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
@@ -283,22 +362,121 @@ export const getRouteById = async (req: Request, res: Response) => {
       return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Route not found");
     }
 
-    const routeObj = route.toObject();
+    let routeObj = route.toObject();
+    
+    // Helper function to check if a seat is booked for a specific date
+    const isSeatBookedForDate = (seat: any, targetDate: Date): boolean => {
+      if (!seat.departureDateBookings || seat.departureDateBookings.length === 0) {
+        return false;
+      }
+      
+      return seat.departureDateBookings.some((booking: any) => {
+        const bookingDate = new Date(booking.departureDate);
+        const queryDate = new Date(targetDate);
+        const bookingStatus = booking.status?.toLowerCase();
+        return bookingDate.toDateString() === queryDate.toDateString() && 
+               (bookingStatus === 'booked' || bookingStatus === 'selected');
+      });
+    };
+
+    // Helper function to get seat status for a specific date
+    const getSeatStatusForDate = (seat: any, targetDate: Date): string => {
+      if (!seat.departureDateBookings || seat.departureDateBookings.length === 0) {
+        return 'available';
+      }
+      
+      const booking = seat.departureDateBookings.find((booking: any) => {
+        const bookingDate = new Date(booking.departureDate);
+        const queryDate = new Date(targetDate);
+        return bookingDate.toDateString() === queryDate.toDateString();
+      });
+
+      if (!booking) {
+        return 'available';
+      }
+
+      // Normalize status to lowercase for comparison
+      const bookingStatus = booking.status?.toLowerCase();
+
+      // Check if hold is expired
+      if (bookingStatus === 'selected' && booking.expiresAt) {
+        if (new Date() > new Date(booking.expiresAt)) {
+          return 'available';
+        }
+        return 'selected';
+      }
+
+      if (bookingStatus === 'booked') {
+        return 'booked';
+      }
+
+      return 'available';
+    };
 
     // Calculate available seats
     const bus = routeObj.bus as any;
     if (bus && bus.seatLayout && bus.seatLayout.seats) {
       const seats = bus.seatLayout.seats;
       const totalSeats = seats.length;
-      const availableSeats = seats.filter((seat: any) => 
-        seat.status === 'available' && seat.isAvailable === true
-      ).length;
-      const bookedSeats = seats.filter((seat: any) => 
-        seat.status === 'booked'
-      ).length;
-      const heldSeats = seats.filter((seat: any) => 
-        seat.status === 'held' || seat.status === 'selected'
-      ).length;
+      
+      let availableSeats = 0;
+      let bookedSeats = 0;
+      let heldSeats = 0;
+
+      if (date) {
+        // Filter seats based on departure date
+        const targetDate = new Date(date as string);
+        
+        // Add status information to each seat for the requested date
+        (routeObj.bus as any).seatLayout.seats = seats.map((seat: any) => {
+          const seatStatus = getSeatStatusForDate(seat, targetDate);
+          const isBooked = isSeatBookedForDate(seat, targetDate);
+          
+          // Find the booking for this specific date to get userId
+          const dateSpecificBooking = seat.departureDateBookings?.find((booking: any) => {
+            const bookingDate = new Date(booking.departureDate);
+            const queryDate = new Date(targetDate);
+            return bookingDate.toDateString() === queryDate.toDateString();
+          });
+          
+          return {
+            seatLabel: seat.seatLabel,
+            seatIndex: seat.seatIndex,
+            type: seat.type,
+            status: seatStatus,  // Updated to reflect date-specific status
+            isAvailable: !isBooked,  // Updated to reflect date-specific availability
+            userId: dateSpecificBooking?.userId || null,  // Updated to show who booked for this date
+            meta: seat.meta,
+            departureDateBookings: seat.departureDateBookings
+          };
+        });
+
+        // Count seats by status for the specific date
+        availableSeats = (routeObj.bus as any).seatLayout.seats.filter((seat: any) => 
+          seat.status === 'available'
+        ).length;
+        
+        bookedSeats = (routeObj.bus as any).seatLayout.seats.filter((seat: any) => 
+          seat.status === 'booked'
+        ).length;
+        
+        heldSeats = (routeObj.bus as any).seatLayout.seats.filter((seat: any) => 
+          seat.status === 'selected'
+        ).length;
+      } else {
+        // Without date filter, show general seat availability
+        availableSeats = seats.filter((seat: any) => 
+          seat.status === 'available' || seat.isAvailable === true
+        ).length;
+        
+        bookedSeats = seats.filter((seat: any) => 
+          seat.status === 'booked'
+        ).length;
+        
+        heldSeats = seats.filter((seat: any) => 
+          seat.status === 'held' || seat.status === 'selected'
+        ).length;
+      }
 
       const routeWithSeatInfo = {
         ...routeObj,
@@ -307,9 +485,8 @@ export const getRouteById = async (req: Request, res: Response) => {
           available: availableSeats,
           booked: bookedSeats,
           held: heldSeats,
-          availableSeats: seats.filter((seat: any) => 
-            seat.status === 'available' && seat.isAvailable === true
-          )
+          availableSeats: availableSeats,
+          ...(date && { departureDate: date })
         }
       };
 

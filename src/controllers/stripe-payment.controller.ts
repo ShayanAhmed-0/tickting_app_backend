@@ -13,6 +13,7 @@ import { SeatStatus, PaymentGateway, TransactionStatus, ForWho, TripType, UserRo
 import { AUTH_CONSTANTS } from "../constants/messages";
 import { io } from "../server";
 import { redis, RedisKeys } from "../config/redis";
+import { departureDateSeatService } from "../services/departure-date-seat.service";
 
 const stripe = new Stripe(STRIPE_SECRET_KEY as string);
 
@@ -46,6 +47,7 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
     // Extract metadata from payment intent
     const metadata = paymentIntent.metadata;
     const userId = metadata.userId;
+    const departureDate = metadata.departureDate;
     const routeId = metadata.routeId;
     const bookedBy = metadata.bookedBy;
     const busId = metadata.busId;
@@ -130,24 +132,41 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       );
     }
 
-    // Check if seats are held/selected by this user or available
-    const invalidSeats = getUserSeats.filter((seat: any) => {
-      // Seat must be either:
-      // 1. Available (no userId)
-      // 2. Held/Selected by the current user
-      const isAvailableOrOwnedByUser = 
-        !seat.userId || 
-        seat.userId.toString() === userId;
+    // Check if seats are available for the specific departure date
+    const invalidSeats = [];
+    for (const seat of getUserSeats) {
+      if (!departureDate) {
+        return ResponseUtil.errorResponse(
+          res,
+          STATUS_CODES.BAD_REQUEST,
+          "Departure date is required"
+        );
+      }
       
-      return !isAvailableOrOwnedByUser;
-    });
+      const availability = await departureDateSeatService.isSeatAvailableForDate(
+        busId,
+        seat.seatLabel,
+        new Date(departureDate)
+      );
+      
+      if (!availability.available) {
+        // Check if it's held by the same user (allow booking)
+        if (availability.currentBooking && 
+            availability.currentBooking.userId.toString() === userId &&
+            availability.currentBooking.status === SeatStatus.SELECTED) {
+          // User's hold, can proceed
+        } else {
+          invalidSeats.push(seat);
+        }
+      }
+    }
 
     if (invalidSeats.length > 0) {
       const seatLabelsInvalid = invalidSeats.map((s: any) => s.seatLabel).join(', ');
       return ResponseUtil.errorResponse(
         res, 
         STATUS_CODES.BAD_REQUEST, 
-        `Seats ${seatLabelsInvalid} are already held or booked by another user`
+        `Seats ${seatLabelsInvalid} are not available or already booked for this departure date`
       );
     }
 
@@ -229,9 +248,35 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       //   throw new Error(`Date of birth is required for passenger ${i + 1}`);
       // }
 
+      // Normalize bookedBy to match enum values (lowercase)
+      let normalizedBookedBy = UserRole.CUSTOMER; // default
+      if (bookedBy) {
+        const bookedByLower = bookedBy.toLowerCase();
+        // Map to correct enum value
+        switch (bookedByLower) {
+          case 'customer':
+            normalizedBookedBy = UserRole.CUSTOMER;
+            break;
+          case 'cashier':
+            normalizedBookedBy = UserRole.CASHIER;
+            break;
+          case 'manager':
+            normalizedBookedBy = UserRole.MANAGER;
+            break;
+          case 'driver':
+            normalizedBookedBy = UserRole.DRIVER;
+            break;
+          case 'super_admin':
+            normalizedBookedBy = UserRole.SUPER_ADMIN;
+            break;
+          default:
+            normalizedBookedBy = UserRole.CUSTOMER;
+        }
+      }
+
       const create = await PassengerModel.create({
         user: userId,
-        bookedBy: bookedBy? bookedBy : UserRole.CUSTOMER,
+        bookedBy: normalizedBookedBy,
         seatLabel: passenger.seatLabel,
         busId: getBus._id,
         for: forType,
@@ -251,22 +296,22 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       passengersDB.push(create);
     }
 
-    // Update bus seat status to BOOKED
+    // Update bus seat status to BOOKED using departure date service
     for (const passenger of passengersData) {
       if (!passenger.seatLabel) continue; // Skip if seatLabel is undefined
       
-      await BusModel.updateOne(
-        {
-          _id: getBus._id,
-          "seatLayout.seats.seatLabel": passenger.seatLabel
-        },
-        {
-          $set: {
-            "seatLayout.seats.$.status": SeatStatus.BOOKED,
-            "seatLayout.seats.$.isAvailable": false
-          }
-        }
+      // Book the seat for the specific departure date
+      const bookingResult = await departureDateSeatService.bookSeatForDate(
+        getBus._id?.toString() || busId,
+        passenger.seatLabel,
+        new Date(departureDate || new Date()),
+        userId,
+        passengersDB.find(p => p.seatLabel === passenger.seatLabel)?._id?.toString() || ''
       );
+      
+      if (!bookingResult.success) {
+        console.error(`Failed to book seat ${passenger.seatLabel}:`, bookingResult.reason);
+      }
 
       // Delete the Redis hold for this seat since it's now permanently booked
       const holdKey = RedisKeys.seatHold(routeId, passenger.seatLabel);

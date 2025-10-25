@@ -214,6 +214,7 @@ export interface Seat {
   isAvailable: boolean;
   userId?: ObjectId | null;
   meta?: any;
+  departureDate?: Date;
 }
 
 export interface SeatLayout {

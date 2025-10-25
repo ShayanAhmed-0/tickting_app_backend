@@ -83,6 +83,7 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
     const returnRouteId = metadata.returnRouteId;
     const returnBusId = metadata.returnBusId;
     const roundTripDate = metadata.roundTripDate;
+    const departureDate = metadata.departureDate;
 
     if (!userId || !routeId || !busId) {
       console.error('Missing required metadata in payment intent');
@@ -148,6 +149,7 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
         seatLabel: passenger.seatLabel,
         busId: getBus._id,
         for: forType,
+        departureDate: new Date(departureDate),
         ticketNumber: `TKT-${Date.now()}-${i}`,
         groupTicketSerial: groupTicketSerial,
         fullName: passenger.fullName,
@@ -223,12 +225,25 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
             "seatLayout.seats.$.status": SeatStatus.BOOKED,
             "seatLayout.seats.$.isAvailable": false
           },
-          $inc: { totalBookedSeats: 1 }
+          $push: { 
+            "seatLayout.seats.$.departureDate": new Date(departureDate),
+            "bookedDateCount.$.date": new Date(departureDate),
+            "bookedDateCount.$.count": 1,
+          }
         }
       );
 
       // Emit seat status change to all users in the route room
+      //v1
       io.to(`route:${routeId}`).emit('seat:status:changed', {
+        routeId: routeId,
+        seatLabel: seat.seatLabel,
+        status: SeatStatus.BOOKED,
+        userId: userId,
+        busId: busId
+      });
+      //v2
+      io.to(`route:${routeId}:${departureDate}`).emit('seat:status:changed', {
         routeId: routeId,
         seatLabel: seat.seatLabel,
         status: SeatStatus.BOOKED,
@@ -254,12 +269,25 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
               "seatLayout.seats.$.status": SeatStatus.BOOKED,
               "seatLayout.seats.$.isAvailable": false
             },
-            $inc: { totalBookedSeats: 1 }
+            $push: { 
+              "seatLayout.seats.$.departureDate": new Date(roundTripDate),
+              "bookedDateCount.$.date": new Date(roundTripDate),
+              "bookedDateCount.$.count": 1,
+            }
           }
         );
 
         // Emit seat status change for return route
+        //v1
         io.to(`route:${returnRouteId}`).emit('seat:status:changed', {
+          routeId: returnRouteId,
+          seatLabel: seat.seatLabel,
+          status: SeatStatus.BOOKED,
+          userId: userId,
+          busId: returnBusId
+        });
+        //v2
+        io.to(`route:${returnRouteId}:${roundTripDate}`).emit('seat:status:changed', {
           routeId: returnRouteId,
           seatLabel: seat.seatLabel,
           status: SeatStatus.BOOKED,
