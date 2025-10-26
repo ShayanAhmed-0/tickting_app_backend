@@ -17,6 +17,7 @@ import Maintenance from './maintenance.model';
 import AuditLog from './audit-log.model';
 import Notification from './notification.model';
 import Device from './device.model';
+import DriverReport from './driver-report.model';
 
 // Export individual models
 export {
@@ -34,7 +35,8 @@ export {
   Maintenance,
   AuditLog,
   Notification,
-  Device
+  Device,
+  DriverReport
 };
 
 // Export interfaces for TypeScript usage
@@ -53,6 +55,7 @@ export type { IMaintenance } from './maintenance.model';
 export type { IAuditLog } from './audit-log.model';
 export type { INotification } from './notification.model';
 export type { IDevice } from './device.model';
+export type { IDriverReport } from './driver-report.model';
 
 // Export common types and enums
 export * from './common/types';
@@ -74,7 +77,8 @@ const models = {
   Maintenance,
   AuditLog,
   Notification,
-  Device
+  Device,
+  DriverReport
 };
 
 export default models;
