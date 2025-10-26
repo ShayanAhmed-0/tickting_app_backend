@@ -10,6 +10,7 @@ import BusModel from "../models/bus.model";
 import { createPaymentIntent } from "../utils/Stripe/stripe";
 import AuthModel from "../models/auth.model";
 import RouteModel from "../models/route.model";
+import DriverReport from "../models/driver-report.model";
 
 export const verifyTicket = async (req: CustomRequest, res: Response) => {
     try {
@@ -399,25 +400,74 @@ export const startTrip = async (req: CustomRequest, res: Response) => {
       if(!getUser){
         throw new CustomError(STATUS_CODES.NOT_FOUND, AUTH_CONSTANTS.USER_NOT_FOUND);
       }
-    //   const getProfile = await Profile.findById(getUser.profile)
-    //   if(!getProfile){
-    //     throw new CustomError(STATUS_CODES.NOT_FOUND, AUTH_CONSTANTS.PROFILE_NOT_FOUND);
-    //   }
+      
       const getBus = await BusModel.findOne({ driver: authId })
+        .populate('mxdriverId', 'profile')
+        .populate('driver', 'profile');
+      
       if(!getBus){
         throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.BUS_NOT_FOUND);
       }
+      
       const getRoute = await RouteModel.findOne({ bus: getBus._id })
+        .populate('origin', 'name')
+        .populate('destination', 'name');
+      
       if(!getRoute){
         throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.ROUTE_NOT_FOUND);
       }
-      const updateRoute = await RouteModel.findByIdAndUpdate(getRoute._id, { status: RouteStatus.DEPARTED }, { new: true })
+      
+      const updateRoute = await RouteModel.findByIdAndUpdate(
+        getRoute._id, 
+        { status: RouteStatus.DEPARTED }, 
+        { new: true }
+      );
+
+      // Get current trip date/time from route dayTime
+      const currentDate = new Date();
+      const currentDay = currentDate.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+      const currentDayTime = (getRoute.dayTime || []).find((dt: any) => dt.day === currentDay);
+      
+      const tripDate = currentDayTime?.time || currentDate;
+      const tripTime = new Date(tripDate).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+
+      // Count passengers for this trip
+      const passengerCount = await PassengerModel.countDocuments({
+        busId: getBus._id,
+        DepartureDate: {
+          $gte: new Date(currentDate.setHours(0, 0, 0, 0)),
+          $lt: new Date(currentDate.setHours(23, 59, 59, 999))
+        },
+        isCancelled: false
+      });
+
+      // Create driver report record
+      const driverReport = await DriverReport.create({
+        route: getRoute._id,
+        bus: getBus._id,
+        mxDriver: getBus.mxdriverId || null,
+        usDriver: getBus.driver || null,
+        tripDate: tripDate,
+        tripTime: tripTime,
+        origin: getRoute.origin,
+        destination: getRoute.destination,
+        busRouteName: `${getBus.serialNumber} ${(getRoute.destination as any)?.name || ''}`,
+        routeName: getRoute.name,
+        passengers: passengerCount,
+        status: 'started',
+        startedAt: new Date()
+      });
 
       return ResponseUtil.successResponse(
         res,
         STATUS_CODES.SUCCESS,
         { 
           route: updateRoute,
+          tripReport: driverReport,
           message: "Trip started successfully. Passengers can now board."
         },
         "Trip started successfully"
@@ -448,13 +498,47 @@ export const startTrip = async (req: CustomRequest, res: Response) => {
         if(getRoute.status !== RouteStatus.DEPARTED){
             throw new CustomError(STATUS_CODES.BAD_REQUEST, "Trip not started yet");
         }
-        const updateRoute = await RouteModel.findByIdAndUpdate(getRoute._id, { status: RouteStatus.COMPLETED }, { new: true })
+        const updateRoute = await RouteModel.findByIdAndUpdate(
+          getRoute._id, 
+          { status: RouteStatus.COMPLETED }, 
+          { new: true }
+        );
+
+        // Get final passenger count for today's trip
+        const currentDate = new Date();
+        const passengerCount = await PassengerModel.countDocuments({
+          busId: getBus._id,
+          DepartureDate: {
+            $gte: new Date(currentDate.setHours(0, 0, 0, 0)),
+            $lt: new Date(currentDate.setHours(23, 59, 59, 999))
+          },
+          isCancelled: false
+        });
+
+        // Update the most recent driver report for this route/bus to completed
+        const updatedReport = await DriverReport.findOneAndUpdate(
+          {
+            route: getRoute._id,
+            bus: getBus._id,
+            status: 'started'
+          },
+          {
+            status: 'completed',
+            completedAt: new Date(),
+            passengers: passengerCount // Update with final count
+          },
+          { 
+            new: true,
+            sort: { startedAt: -1 } // Get the most recent one
+          }
+        );
   
       return ResponseUtil.successResponse(
         res,
         STATUS_CODES.SUCCESS,
         { 
           trip: updateRoute,
+          tripReport: updatedReport,
           message: "Trip completed successfully."
         },
         "Trip ended successfully"

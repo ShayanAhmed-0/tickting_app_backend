@@ -618,7 +618,7 @@ export const getLatestBooking = async (req: CustomRequest, res: Response) => {
     return ResponseUtil.successResponse(
       res,
       STATUS_CODES.SUCCESS,
-      { latestBooking },
+      { latestBooking: [latestBooking] },
       "Latest booking fetched successfully"
     );
   } catch (err) {
