@@ -761,29 +761,47 @@ export class SeatBookingService {
       
       for (const hold of userHolds) {
         try {
-          const [routeId, seatLabel] = hold.split(':');
-          const holdKey = RedisKeys.seatHold(routeId, seatLabel);
-          const holdData = await redis.get(holdKey);
+          const holdParts = hold.split(':');
+          const routeId = holdParts[0];
+          const seatLabel = holdParts[1];
+          const departureDate = holdParts[2]; // Optional departure date
           
-          if (holdData) {
-            const holdInfo = JSON.parse(holdData);
+          // Check if this is a date-specific hold or legacy hold
+          let holdKey: string;
+          let departureDateObj: Date | undefined;
+          
+          if (departureDate) {
+            // Date-specific hold
+            holdKey = RedisKeys.seatHold(routeId, seatLabel, departureDate);
+            departureDateObj = new Date(departureDate);
+          } else {
+            // Legacy hold (no date)
+            holdKey = RedisKeys.seatHold(routeId, seatLabel);
+          }
+          
+          // Get bus ID from route
+          const route = await Route.findById(routeId).populate('bus');
+          if (route && route.bus) {
+            const busId = (route.bus as any)._id.toString();
             
-            // Get bus ID from route
-            const route = await Route.findById(routeId).populate('bus');
-            if (route && route.bus) {
-              const busId = (route.bus as any)._id.toString();
-              
-              // Release the seat
-              const result = await this.releaseSeat(busId, routeId, seatLabel, userId);
-              if (result.success) {
-                clearedSeats.push(`${routeId}:${seatLabel}`);
-                console.log(`✅ Cleared seat ${seatLabel} for user ${userId} in route ${routeId}`);
-              } else {
-                errors.push(`Failed to clear seat ${seatLabel} in route ${routeId}: ${result.reason}`);
-              }
+            // Release the seat (pass departure date if available)
+            const result = await this.releaseSeat(busId, routeId, seatLabel, userId, departureDateObj);
+            if (result.success) {
+              clearedSeats.push(hold); // Push the full hold key for tracking
+              console.log(`✅ Cleared seat ${seatLabel} for user ${userId} in route ${routeId}${departureDate ? ` on ${departureDate}` : ''}`);
             } else {
-              errors.push(`Route or bus not found for seat ${seatLabel} in route ${routeId}`);
+              // Even if release fails, try to clean up Redis
+              await redis.del(holdKey);
+              await redis.srem(RedisKeys.userHolds(userId), hold);
+              
+              console.warn(`⚠️  Seat release returned failure but cleaned up Redis: ${seatLabel} in route ${routeId}: ${result.reason}`);
+              clearedSeats.push(hold);
             }
+          } else {
+            // Clean up orphaned hold even if route not found
+            await redis.del(holdKey);
+            await redis.srem(RedisKeys.userHolds(userId), hold);
+            errors.push(`Route or bus not found for seat ${seatLabel} in route ${routeId}, but cleaned up hold`);
           }
         } catch (error) {
           const errorMsg = `Error clearing seat ${hold}: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -824,34 +842,55 @@ export class SeatBookingService {
       // Get all holds for this user
       const userHolds = await redis.smembers(RedisKeys.userHolds(userId));
       
+      // Get bus ID from route once
+      const route = await Route.findById(routeId).populate('bus');
+      if (!route || !route.bus) {
+        errors.push(`Route or bus not found for route ${routeId}`);
+        return {
+          success: false,
+          clearedSeats,
+          errors
+        };
+      }
+      const busId = (route.bus as any)._id.toString();
+      
       for (const hold of userHolds) {
         try {
-          const [holdRouteId, seatLabel] = hold.split(':');
+          const holdParts = hold.split(':');
+          const holdRouteId = holdParts[0];
+          const seatLabel = holdParts[1];
+          const departureDate = holdParts[2]; // Optional departure date
           
           // Only process holds for the specified route
           if (holdRouteId === routeId) {
-            const holdKey = RedisKeys.seatHold(routeId, seatLabel);
+            // Check if this is a date-specific hold or legacy hold
+            let holdKey: string;
+            let departureDateObj: Date | undefined;
+            
+            if (departureDate) {
+              // Date-specific hold
+              holdKey = RedisKeys.seatHold(routeId, seatLabel, departureDate);
+              departureDateObj = new Date(departureDate);
+            } else {
+              // Legacy hold (no date)
+              holdKey = RedisKeys.seatHold(routeId, seatLabel);
+            }
+            
+            // Check if hold exists in Redis
             const holdData = await redis.get(holdKey);
             
-            if (holdData) {
-              const holdInfo = JSON.parse(holdData);
+            // Release the seat (pass departure date if available)
+            const result = await this.releaseSeat(busId, routeId, seatLabel, userId, departureDateObj);
+            if (result.success) {
+              clearedSeats.push(hold); // Push the full hold key for tracking
+              console.log(`✅ Cleared seat ${seatLabel} for user ${userId} in route ${routeId}${departureDate ? ` on ${departureDate}` : ''}`);
+            } else {
+              // Even if release fails, try to clean up Redis
+              await redis.del(holdKey);
+              await redis.srem(RedisKeys.userHolds(userId), hold);
               
-              // Get bus ID from route
-              const route = await Route.findById(routeId).populate('bus');
-              if (route && route.bus) {
-                const busId = (route.bus as any)._id.toString();
-                
-                // Release the seat
-                const result = await this.releaseSeat(busId, routeId, seatLabel, userId);
-                if (result.success) {
-                  clearedSeats.push(`${routeId}:${seatLabel}`);
-                  console.log(`✅ Cleared seat ${seatLabel} for user ${userId} in route ${routeId}`);
-                } else {
-                  errors.push(`Failed to clear seat ${seatLabel} in route ${routeId}: ${result.reason}`);
-                }
-              } else {
-                errors.push(`Route or bus not found for seat ${seatLabel} in route ${routeId}`);
-              }
+              console.warn(`⚠️  Seat release returned failure but cleaned up Redis: ${seatLabel} in route ${routeId}: ${result.reason}`);
+              clearedSeats.push(hold);
             }
           }
         } catch (error) {
@@ -901,7 +940,7 @@ export class SeatBookingService {
         bus: route.bus,
         dayTime: route.dayTime.map(dt => ({
           day: dt.day,
-          time: dt.time.toTimeString().slice(0, 5) // Format as HH:MM
+          time: dt.time // Already in "HH:mm" format (e.g., "07:00")
         })),
         isActive: route.isActive
       };

@@ -13,55 +13,43 @@ import helper from "../../helper";
 const generateSeatLayout = (capacity: number) => {
   const seats: Seat[] = [];
   
-  // Standard bus layout: 4 seats per row (2 left + 2 right)
-  // Pattern: seat 1-2 (right), seat 3-4 (left), seat 5-6 (right), seat 7-8 (left), etc.
+  // Standard bus layout: 4 seats per row (2 right + 2 left)
+  // Pattern per row: [2,1] (right), [4,3] (left) for row 1
+  //                  [6,5] (right), [8,7] (left) for row 2, etc.
   const seatsPerRow = 4;
   const totalRows = Math.ceil(capacity / seatsPerRow);
   
-  let seatNumber = 1;
   let seatIndex = 1;
   
   for (let row = 1; row <= totalRows; row++) {
-    // Generate 2 right seats for this row
-    for (let i = 0; i < 2; i++) {
-      if (seatNumber <= capacity) {
-        seats.push({
-          seatLabel: seatNumber.toString(),
-          seatIndex: seatIndex,
-          type: SeatType.REGULAR,
-          isAvailable: true,
-          status: SeatStatus.AVAILABLE,
-          meta: {
-            seatNumber: seatNumber,
-            row: row,
-            position: 'right',
-            section: 'right',
-            column: i + 1
-          }
-        });
-        seatNumber++;
-        seatIndex++;
-      }
-    }
+    // Calculate base seat number for this row
+    const baseNum = (row - 1) * 4 + 1;
     
-    // Generate 2 left seats for this row
-    for (let i = 0; i < 2; i++) {
-      if (seatNumber <= capacity) {
+    // Row pattern: [baseNum+1, baseNum, baseNum+3, baseNum+2]
+    // Which is: [2, 1, 4, 3] for row 1, [6, 5, 8, 7] for row 2, etc.
+    const rowSeats = [
+      { num: baseNum + 1, position: 'right', column: 1 },  // Right column 1 (even: 2, 6, 10...)
+      { num: baseNum,     position: 'right', column: 2 },  // Right column 2 (odd: 1, 5, 9...)
+      { num: baseNum + 3, position: 'left',  column: 1 },  // Left column 1 (even: 4, 8, 12...)
+      { num: baseNum + 2, position: 'left',  column: 2 }   // Left column 2 (odd: 3, 7, 11...)
+    ];
+    
+    for (const seat of rowSeats) {
+      if (seat.num <= capacity) {
         seats.push({
-          seatLabel: seatNumber.toString(),
+          seatLabel: seat.num.toString(),
           seatIndex: seatIndex,
           type: SeatType.REGULAR,
           isAvailable: true,
           status: SeatStatus.AVAILABLE,
           meta: {
-            seatNumber: seatNumber,
+            seatNumber: seat.num,
             row: row,
-            position: 'left',
-            section: 'left',
-            column: i + 1
+            position: seat.position,
+            section: seat.position,
+            column: seat.column
           }
         });
-        seatNumber++;
         seatIndex++;
       }
     }

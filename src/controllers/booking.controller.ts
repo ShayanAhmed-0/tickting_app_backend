@@ -237,6 +237,7 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       salesOffice: salesOffice,
       totalPrice: getTotalPrice,
       seats: getUserSeats.length,
+      baseFare: baseFare,
       busId: getBus._id?.toString() || busId,
       // passengers: JSON.stringify(passengers),
       departureDate: departureDate,
@@ -280,6 +281,7 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       const passenger = passengers[i];
       
       const create=await PassengerModel.create({
+        price: baseFare,
         user: userId,
         office: office,
         salesOffice: salesOffice,
@@ -294,12 +296,11 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
         gender: passenger.gender,
         dob: passenger.dob,
         contactNumber: passenger.contactNumber,
-        departureDate: new Date(departureDate) || (getRoutPrice as any)?.departureTime || new Date(),
         DocumentId: passenger.DocumentId,
         type: tripType, // Assuming one way trip
         From: (getRoutPrice as any)?.origin?.name || "Origin",
         To: (getRoutPrice as any)?.destination?.name || "Destination",
-        // DepartureDate: (getRoutPrice as any)?.departureTime || new Date(),
+        DepartureDate: new Date(departureDate) || (getRoutPrice as any)?.departureTime || new Date(),
         ReturnDate: tripType === TripType.ROUND_TRIP ? new Date(roundTripDate) : null, // Set appropriate return date
       });
       passengersDB.push(create)
@@ -316,6 +317,7 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
         const passenger = passengers[i];
         
         const returnPassenger = await PassengerModel.create({
+          price: baseFare,
           user: userId,
           office: office,
           salesOffice: salesOffice,

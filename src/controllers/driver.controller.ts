@@ -425,11 +425,12 @@ export const startTrip = async (req: CustomRequest, res: Response) => {
 
       // Get current trip date/time from route dayTime
       const currentDate = new Date();
-      const currentDay = currentDate.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+      const tripDate = currentDate; // Trip date is the current date
+      const currentDay = currentDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
       const currentDayTime = (getRoute.dayTime || []).find((dt: any) => dt.day === currentDay);
       
-      const tripDate = currentDayTime?.time || currentDate;
-      const tripTime = new Date(tripDate).toLocaleTimeString('en-US', {
+      // tripTime is already in "HH:mm" format (e.g., "07:00")
+      const tripTime = currentDayTime?.time || currentDate.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
