@@ -10,8 +10,8 @@ import Destination from "../models/destinations.model";
 export async function calculateFare(routeId: string, tripType: string = 'one_way'): Promise<number> {
   try {
     const route = await RouteModel.findById(routeId)
-      .populate('origin', 'name priceToDFW priceFromDFW')
-      .populate('destination', 'name priceToDFW priceFromDFW');
+      .populate('origin', 'name priceToDFW priceFromDFW priceRoundTrip')
+      .populate('destination', 'name priceToDFW priceFromDFW priceRoundTrip');
 
     if (!route) {
       throw new Error('Route not found');
@@ -36,24 +36,26 @@ export async function calculateFare(routeId: string, tripType: string = 'one_way
       }
     } else {
       // Derived fare for non-Dallas routes: A → B = priceToDFW(A) + priceFromDFW(B)
-      fare = (origin.priceToDFW || 0) + (destination.priceFromDFW || 0);
+      // fare = (origin.priceToDFW || 0) + (destination.priceFromDFW || 0);
+      fare = (origin.priceToDFW || 0)
     }
 
     // Handle round trip pricing
     if (tripType === 'round_trip') {
-      if (isDallasRoute) {
-        // For Dallas routes: round trip = priceFromDFW + priceToDFW
-        if (isDallasDestination(origin)) {
-          // Dallas → X round trip = priceFromDFW(X) + priceToDFW(X)
-          fare = (destination.priceFromDFW || 0) + (destination.priceToDFW || 0);
-        } else {
-          // X → Dallas round trip = priceToDFW(X) + priceFromDFW(X)
-          fare = (origin.priceToDFW || 0) + (origin.priceFromDFW || 0);
-        }
-      } else {
-        // For derived routes: round trip = 2 * one-way fare
-        fare = fare * 2;
-      }
+      fare = origin.priceRoundTrip || 0;
+      // if (isDallasRoute) {
+      //   // For Dallas routes: round trip = priceFromDFW + priceToDFW
+      //   if (isDallasDestination(origin)) {
+      //     // Dallas → X round trip = priceFromDFW(X) + priceToDFW(X)
+      //     fare = (destination.priceFromDFW || 0) + (destination.priceToDFW || 0);
+      //   } else {
+      //     // X → Dallas round trip = priceToDFW(X) + priceFromDFW(X)
+      //     fare = (origin.priceToDFW || 0) + (origin.priceFromDFW || 0);
+      //   }
+      // } else {
+      //   // For derived routes: round trip = 2 * one-way fare
+      //   fare = fare * 2;
+      // }
     }
 
     return fare;
@@ -71,7 +73,7 @@ export async function calculateFare(routeId: string, tripType: string = 'one_way
 function isDallasDestination(destination: any): boolean {
   if (!destination || !destination.name) return false;
   
-  const dallasNames = ['Dallas', 'DFW', 'Dallas-Fort Worth', 'Dallas Fort Worth'];
+  const dallasNames = ['Dallas', 'DFW', 'Dallas-Fort Worth', 'Dallas Fort Worth',"Dallas, TX USA"];
   return dallasNames.some(name => 
     destination.name.toLowerCase().includes(name.toLowerCase())
   );

@@ -51,6 +51,7 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
     const routeId = metadata.routeId;
     const bookedBy = metadata.bookedBy;
     const busId = metadata.busId;
+    const baseFare = metadata.baseFare;
     // const passengersData = metadata.passengers ? JSON.parse(metadata.passengers) : [];
     const passengersData = metadata.passengersRedisKey ? JSON.parse(await redis.get(metadata.passengersRedisKey) as string) : [];
     const seatsData = metadata.seats ? parseInt(metadata.seats) : 0;
@@ -275,6 +276,7 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       }
 
       const create = await PassengerModel.create({
+        price: baseFare,
         user: userId,
         bookedBy: normalizedBookedBy,
         seatLabel: passenger.seatLabel,

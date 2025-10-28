@@ -42,6 +42,8 @@ export const salesReportSchema = z.object({
       message: "Sales office ID must be a valid MongoDB ObjectId"
     }),
   
+  format: z.enum(['excel', 'pdf']).optional(),
+  
   page: z.string()
     .optional()
     .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0), {

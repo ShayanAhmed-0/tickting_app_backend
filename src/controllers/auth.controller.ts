@@ -116,7 +116,7 @@ export const login = async (req: Request, res: Response) => {
         AUTH_CONSTANTS.PASSWORD_MISMATCH
       );
     }
-    const token = generateToken({
+    const token: string = generateToken({
       email: email,
       authId: String(user._id),
       role: user.role as UserRole,

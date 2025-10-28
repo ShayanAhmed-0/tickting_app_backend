@@ -7,7 +7,23 @@ import RouteModel from "../../models/route.model";
 import Destination from "../../models/destinations.model";
 import Bus from "../../models/bus.model";
 import helper from "../../helper";
-import { SeatStatus } from "../../models/tours.models";
+import { SeatStatus, TripType } from "../../models/tours.models";
+import { calculateFare } from "../../utils/pricing";
+import { DaysEnums } from "../../models/common/types";
+
+// Helper function to convert JavaScript day number (0-6) to DaysEnums string
+const getDayEnumFromNumber = (dayNumber: number): string => {
+  const dayMap: { [key: number]: string } = {
+    0: DaysEnums.SUNDAY,      // Sunday
+    1: DaysEnums.MONDAY,      // Monday
+    2: DaysEnums.TUESDAY,     // Tuesday
+    3: DaysEnums.WEDNESDAY,   // Wednesday
+    4: DaysEnums.THURSDAY,    // Thursday
+    5: DaysEnums.FRIDAY,      // Friday
+    6: DaysEnums.SATURDAY     // Saturday
+  };
+  return dayMap[dayNumber] || DaysEnums.MONDAY;
+};
 
 export const createRoute = async (req: Request, res: Response) => {
   try {
@@ -29,7 +45,7 @@ export const createRoute = async (req: Request, res: Response) => {
     if (existingRoute) {
       throw new CustomError(STATUS_CODES.CONFLICT, "Route with this name already exists");
     }
-
+ 
     // Create new route
     const newRoute = new RouteModel({
       name,
@@ -69,14 +85,14 @@ export const createRoute = async (req: Request, res: Response) => {
 
 export const getRoutes = async (req: Request, res: Response) => {
   try {
-    const { 
+    let { 
       page, 
       limit, 
       origin, 
       destination, 
       departureDate, 
       returnDate, 
-      tripType, 
+      tripType = TripType.ONE_WAY, 
       day, 
       time, 
       bus, 
@@ -107,8 +123,113 @@ export const getRoutes = async (req: Request, res: Response) => {
     }
 
     // Day filter (for specific day of week)
-    if (day) {
-      query['dayTime.day'] = day;
+    // Note: dayTime.time now stores time as a string in "HH:mm" format (e.g., "07:00", "14:30")
+    // We filter by dayTime.day which contains the day of week string ("monday", "tuesday", etc.)
+    
+    // Get current time in UTC as "HH:mm" string format
+    const now = new Date();
+    const currentHoursUTC = now.getUTCHours();
+    const currentMinutesUTC = now.getUTCMinutes();
+    const currentTimeString = `${currentHoursUTC.toString().padStart(2, '0')}:${currentMinutesUTC.toString().padStart(2, '0')}`;
+    
+    // Date filtering - handle both departure and return dates by matching day of week
+    if(departureDate && returnDate){
+      tripType = TripType.ROUND_TRIP;
+      // For round-trip, find routes that operate on either departure day OR return day
+      const depDate = new Date(departureDate as string);
+      const retDate = new Date(returnDate as string);
+      
+      // Get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+      const depDayOfWeekNum = depDate.getDay();
+      const retDayOfWeekNum = retDate.getDay();
+      
+      // Convert to DaysEnums string format (e.g., "monday", "tuesday")
+      const depDayOfWeek = getDayEnumFromNumber(depDayOfWeekNum);
+      const retDayOfWeek = getDayEnumFromNumber(retDayOfWeekNum);
+      
+      const isDepToday = depDate.toDateString() === now.toDateString();
+      const isRetToday = retDate.toDateString() === now.toDateString();
+      
+      // If departure or return is today, filter by time as well using $elemMatch
+      if (isDepToday || isRetToday) {
+        const orConditions: any[] = [];
+        
+        // Add departure day condition (with time filter if today)
+        if (isDepToday) {
+          orConditions.push({
+            dayTime: {
+              $elemMatch: {
+                day: depDayOfWeek,
+                time: { $gte: currentTimeString }  // Simple string comparison: "07:00" >= "04:04"
+              }
+            }
+          });
+        } else {
+          orConditions.push({ 'dayTime.day': depDayOfWeek });
+        }
+        
+        // Add return day condition (with time filter if today)
+        if (isRetToday) {
+          orConditions.push({
+            dayTime: {
+              $elemMatch: {
+                day: retDayOfWeek,
+                time: { $gte: currentTimeString }  // Simple string comparison: "07:00" >= "04:04"
+              }
+            }
+          });
+        } else {
+          orConditions.push({ 'dayTime.day': retDayOfWeek });
+        }
+        
+        query.$or = orConditions;
+      } else {
+        // Neither date is today, just match the days
+        query.$or = [
+          { 'dayTime.day': depDayOfWeek },
+          { 'dayTime.day': retDayOfWeek }
+        ];
+      }
+    } else if(departureDate){
+      // Only departure date provided - match routes that operate on this day of week
+      const depDate = new Date(departureDate as string);
+      const depDayOfWeekNum = depDate.getDay();
+      const depDayOfWeek = getDayEnumFromNumber(depDayOfWeekNum);
+      const isToday = depDate.toDateString() === now.toDateString();
+      
+      // If departure is today, filter by BOTH day AND time using $elemMatch
+      // Time is stored as string "HH:mm" (e.g., "07:00") and compared directly
+      if (isToday) {
+        query.dayTime = {
+          $elemMatch: {
+            day: depDayOfWeek,
+            time: { $gte: currentTimeString }  // Simple string comparison: "07:00" >= "04:04"
+          }
+        };
+      } else {
+        // For future dates, just match the day
+        query['dayTime.day'] = depDayOfWeek;
+      }
+    } else if(returnDate){
+      // Only return date provided - match routes that operate on this day of week
+      const retDate = new Date(returnDate as string);
+      const retDayOfWeekNum = retDate.getDay();
+      const retDayOfWeek = getDayEnumFromNumber(retDayOfWeekNum);
+      const isToday = retDate.toDateString() === now.toDateString();
+      
+      // If return is today, filter by BOTH day AND time using $elemMatch
+      // Time is stored as string "HH:mm" (e.g., "07:00") and compared directly
+      if (isToday) {
+        query.dayTime = {
+          $elemMatch: {
+            day: retDayOfWeek,
+            time: { $gte: currentTimeString }  // Simple string comparison: "07:00" >= "04:04"
+          }
+        };
+      } else {
+        // For future dates, just match the day
+        query['dayTime.day'] = retDayOfWeek;
+      }
     }
 
     // // Time filter (for specific time range)
@@ -229,9 +350,9 @@ export const getRoutes = async (req: Request, res: Response) => {
     };
     
     // Calculate available seats for each route
-    const routesWithSeatInfo = Array.isArray(routes.routes) ? routes.routes.map((route: any) => {
+    const routesWithSeatInfo = Array.isArray(routes.routes) ? await Promise.all(routes.routes.map(async (route: any) => {
       const routeObj = route.toObject ? route.toObject() : route;
-      
+      const baseFare = await calculateFare(routeObj._id.toString(), tripType as string);
       if (routeObj.bus && routeObj.bus.seatLayout && routeObj.bus.seatLayout.seats) {
         const seats = routeObj.bus.seatLayout.seats;
         const totalSeats = seats.length;
@@ -274,8 +395,10 @@ export const getRoutes = async (req: Request, res: Response) => {
         // Remove detailed seat layout from response to reduce payload size
         delete routeObj.bus.seatLayout;
 
+
         return {
           ...routeObj,
+          baseFare: baseFare,
           seatAvailability: {
             total: totalSeats,
             available: availableSeats,
@@ -286,8 +409,11 @@ export const getRoutes = async (req: Request, res: Response) => {
         };
       }
       
-      return routeObj;
-    }) : [];
+      return {
+        ...routeObj,
+        baseFare: baseFare
+      };
+    })) : [];
     
     console.log('📋 Routes Result:', JSON.stringify({
       totalDocs: routes.totalDocs,
@@ -349,7 +475,8 @@ export const getRoutes = async (req: Request, res: Response) => {
 export const getRouteById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { date } = req.query;
+    const { date ,returnDate} = req.query;
+    const tripType = returnDate ? TripType.ROUND_TRIP : TripType.ONE_WAY;
     const populateOptions = [
       { path: "origin", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
       { path: "destination", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
@@ -477,7 +604,8 @@ export const getRouteById = async (req: Request, res: Response) => {
           seat.status === 'held' || seat.status === 'selected'
         ).length;
       }
-
+      const fare = await calculateFare(routeObj._id as string, tripType as string);
+      (routeObj as any).baseFare = fare as any;
       const routeWithSeatInfo = {
         ...routeObj,
         seatAvailability: {
@@ -489,7 +617,7 @@ export const getRouteById = async (req: Request, res: Response) => {
           ...(date && { departureDate: date })
         }
       };
-
+      
       return ResponseUtil.successResponse(
         res, 
         STATUS_CODES.SUCCESS, 
@@ -497,13 +625,9 @@ export const getRouteById = async (req: Request, res: Response) => {
         ADMIN_CONSTANTS.ROUTE_FETCHED
       );
     }
-
-    return ResponseUtil.successResponse(
-      res, 
-      STATUS_CODES.SUCCESS, 
-      { route: routeObj }, 
-      ADMIN_CONSTANTS.ROUTE_FETCHED
-    );
+    const fare = await calculateFare(routeObj._id as string, tripType as string);
+    (routeObj as any).baseFare = fare as any;
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { route: routeObj }, ADMIN_CONSTANTS.ROUTE_FETCHED);
   } catch (err) {
     if (err instanceof CustomError)
       return ResponseUtil.errorResponse(res, err.statusCode, err.message);

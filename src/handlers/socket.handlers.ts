@@ -235,7 +235,7 @@ export class SocketHandlers {
       });
       
       // Leave route room with acknowledgment
-      socket.on('leave:route', (data: { routeId: string }, ack: Function) => {
+      socket.on('leave:route', (data: { routeId: string; date?: string }, ack: Function) => {
         if (typeof ack !== 'function') {
           console.error('leave:route event called without acknowledgment function');
           return;
@@ -473,9 +473,9 @@ export class SocketHandlers {
   /**
    * Handle leaving a route room with acknowledgment
    */
-  private async handleLeaveRoute(socket: any, data: { routeId: string }, ack: Function) {
+  private async handleLeaveRoute(socket: any, data: { routeId: string; date?: string }, ack: Function) {
     try {
-      const { routeId } = data;
+      const { routeId, date } = data;
       const socketData = socket.data as SocketData;
       
       if (!routeId) {
@@ -491,17 +491,33 @@ export class SocketHandlers {
         const clearResult = await seatBookingService.clearUserSeatsForRoute(socketData.userId, routeId);
         
         if (clearResult.success && clearResult.clearedSeats.length > 0) {
-          console.log(`🧹 Cleared ${clearResult.clearedSeats.length} seats for user ${socketData.userId} leaving route ${routeId}`);
+          console.log(`🧹 Cleared ${clearResult.clearedSeats.length} seats for user ${socketData.userId} leaving route ${routeId}${date ? ` on ${date}` : ''}`);
           
           // Broadcast seat status changes for cleared seats
           for (const seat of clearResult.clearedSeats) {
-            const [_, seatLabel] = seat.split(':');
+            const holdParts = seat.split(':');
+            const seatLabel = holdParts[1];
+            const seatDate = holdParts[2]; // Optional departure date from hold
+            
+            // Broadcast to general route room
             this.io.to(`route:${routeId}`).emit('seat:status:changed', {
-              routeId: routeId, // Keep field name for compatibility
+              routeId: routeId,
               seatLabel,
               status: 'available',
-              userId: socketData.userId
+              userId: socketData.userId,
+              departureDate: seatDate
             });
+            
+            // Also broadcast to date-specific room if date exists
+            if (seatDate) {
+              this.io.to(`route:${routeId}:${seatDate}`).emit('seat:status:changed', {
+                routeId: routeId,
+                seatLabel,
+                status: 'available',
+                userId: socketData.userId,
+                departureDate: seatDate
+              });
+            }
           }
         }
         
@@ -514,10 +530,14 @@ export class SocketHandlers {
         console.error('Error clearing seats on leave route:', error);
       }
       
+      // Leave both general and date-specific rooms
       socket.leave(`route:${routeId}`);
+      if (date) {
+        socket.leave(`route:${routeId}:${date}`);
+      }
       socketData.currentTrip = undefined;
       
-      console.log(`User ${socketData.userId} left route ${routeId}`);
+      console.log(`User ${socketData.userId} left route ${routeId}${date ? ` on ${date}` : ''}`);
       
       // Send acknowledgment
       ack({
@@ -525,16 +545,26 @@ export class SocketHandlers {
         message: `Successfully left route ${routeId}`,
         data: {
           routeId,
+          date,
           timestamp: new Date().toISOString()
         }
       });
       
-      // Broadcast to other users
+      // Broadcast to other users in both rooms
       socket.to(`route:${routeId}`).emit('user:left', {
         routeId,
         userCount: this.io.sockets.adapter.rooms.get(`route:${routeId}`)?.size || 0,
         userId: socketData.userId
       });
+      
+      if (date) {
+        socket.to(`route:${routeId}:${date}`).emit('user:left', {
+          routeId,
+          date,
+          userCount: this.io.sockets.adapter.rooms.get(`route:${routeId}:${date}`)?.size || 0,
+          userId: socketData.userId
+        });
+      }
       
     } catch (error) {
       console.error('Error leaving route:', error);

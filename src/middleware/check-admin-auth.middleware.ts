@@ -31,7 +31,7 @@ export const checkAdminAuth = (
         if(ENVIRONMENT==="Development"){
             next();
         }else{
-            if (req.role === UserRole.SUPER_ADMIN) {
+            if (req.role === UserRole.SUPER_ADMIN || req.role === UserRole.CASHIER || req.role === UserRole.MANAGER) {
                 next();
             } else {
                 res.status(403).json({ message: `Required role is admin current role: ${req.role}` });

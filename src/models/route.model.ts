@@ -11,7 +11,7 @@ export interface IRoute extends Document {
   bus: ObjectId;
   dayTime:{
     day: DaysEnums,
-    time: Date
+    time: string  // Format: "HH:mm" (e.g., "07:00", "14:30")
   }[]
   intermediateStops: ObjectId[];
   // baseDurationMinutes?: number;
@@ -21,6 +21,7 @@ export interface IRoute extends Document {
   isActive: boolean;
   // pricingPolicy?: PricingPolicy;
   createdAt: Date;
+  isToDallas: boolean;
   status: RouteStatus;
   updatedAt: Date;
 }
@@ -42,12 +43,20 @@ const RouteSchema = new Schema<IRoute>({
         required: true
       },
       time: {
-        type: Date,
-        required: true
+        type: String,  // Format: "HH:mm" (e.g., "07:00", "14:30")
+        required: true,
+        validate: {
+          validator: function(v: string) {
+            // Validate time format HH:mm (24-hour format)
+            return /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(v);
+          },
+          message: 'Time must be in HH:mm format (e.g., "07:00", "14:30")'
+        }
       }
     }, { _id: false })],
     default: []
   },
+  isToDallas: { type: Boolean, default: false },
   // code: { type: String, required: true, index: true }, // e.g. 'MX-CHIH-UAQ'
   // baseDurationMinutes: Number,
   // baseDistanceKm: Number,

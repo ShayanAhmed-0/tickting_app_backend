@@ -72,6 +72,7 @@ app.use(`${API_PREFIX}/admin/destination`, adminDestinationRoutes);
 app.use(`${API_PREFIX}/admin/routes`, adminRoutesRoutes);
 app.use(`${API_PREFIX}/admin/agents`, adminAgentsRoutes);
 app.use(`${API_PREFIX}/admin/reports`, adminReportRoutes);
+// app.use(`${API_PREFIX}/admin/misc`, adminMiscRoutes);
 // booking routes (real-time seat booking)
 // web routes
 app.use(`/api`, webRoutes);
