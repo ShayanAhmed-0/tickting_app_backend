@@ -11,6 +11,7 @@ export const checkAdminAuth = (
     next: NextFunction
 ) => {
     const tokenHeader = req.headers["authorization"];
+    console.log(req.url);
 
     if (!tokenHeader) {
         res.status(410).json({ message: "UnAuthorized Request" });

@@ -14,6 +14,7 @@ import Bus from "../../models/bus.model";
 import PassengerModel from "../../models/passenger.models";
 import Profile from "../../models/profile.model";
 import { RouteStatus } from "../../models/common/types";
+import currencyModel from "../../models/currency.model";
 
 // export const createServices = async (req: CustomRequest, res: Response) => {
 //     try {
@@ -506,6 +507,37 @@ export const getDashboard = async (req: CustomRequest, res: Response) => {
         ? 'Dashboard data fetched successfully (Last 30 days)' 
         : 'Dashboard data fetched successfully'
     );
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const updateCurrency = async (req: CustomRequest, res: Response) => {
+  try {
+    let { usd, mxn } = req.body;
+    const getCurrency = await currencyModel.findOne();
+    // if (!getCurrency) {
+    //   throw new CustomError(STATUS_CODES.NOT_FOUND, MISC_CONSTANTS.CURRENCY_NOT_FOUND);
+    // }
+    if(!usd) usd = getCurrency?.USD;
+    if(!mxn) mxn = getCurrency?.MXN;
+
+    const currency = await currencyModel.create({ USD: usd, MXN: mxn });
+    // const currency = await currencyModel.updateOne({ USD: usd, MXN: mxn });
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { currency }, MISC_CONSTANTS.CURRENCY_UPDATED);
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const getCurrency = async (req: CustomRequest, res: Response) => {
+  try {
+    const currency = await currencyModel.findOne();
+    return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { currency }, MISC_CONSTANTS.CURRENCY_FETCHED);
   } catch (err) {
     if (err instanceof CustomError)
       return ResponseUtil.errorResponse(res, err.statusCode, err.message);

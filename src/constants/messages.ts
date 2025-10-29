@@ -33,7 +33,10 @@ export const AUTH_CONSTANTS = {
 
 export const MISC_CONSTANTS = {
   ALL_LOCS_FETCHED: "ALL list of contents fetched successfully",
-  NAME_REQUIRED: "Name is required to create a service"
+  NAME_REQUIRED: "Name is required to create a service",
+  CURRENCY_NOT_FOUND: "Currency not found",
+  CURRENCY_UPDATED: "Currency updated successfully",
+  CURRENCY_FETCHED: "Currency fetched successfully",
 }
 export const WEB_CONSTANTS = {
   CONTACT_FORM: "Contact Form",
@@ -112,4 +115,20 @@ export const DRIVER_CONSTANTS = {
   BAGGAGE_PAYMENT_INTENT_CREATED: "Payment intent created for extra baggage. Please complete the payment.",
   PASSENGERS_COUNT_FETCHED: "Passengers count fetched successfully",
   BAGGAGE_ADDED_SUCCESSFULLY: "Extra baggage added successfully",
+}
+
+export const PERMISSION_CONSTANTS = {
+  PERMISSIONS_INITIALIZED: "Permissions initialized successfully",
+  PERMISSIONS_FETCHED: "Permissions fetched successfully",
+  ROLE_PERMISSIONS_FETCHED: "Role permissions fetched successfully",
+  ALL_ROLE_PERMISSIONS_FETCHED: "All role permissions fetched successfully",
+  ROLE_PERMISSIONS_UPDATED: "Role permissions updated successfully",
+  ROLE_PERMISSIONS_DELETED: "Role permissions deleted successfully",
+  ROLE_PERMISSIONS_NOT_FOUND: "Role permissions not found",
+  INVALID_ROLE: "Invalid role specified",
+  INVALID_PERMISSIONS_FORMAT: "Invalid permissions format. Expected array of {module, actions[]}",
+  MISSING_PERMISSION_PARAMS: "Missing required parameters: role, module, and action",
+  PERMISSION_CHECKED: "Permission check completed",
+  CANNOT_DELETE_SUPERADMIN_PERMISSIONS: "Cannot delete super admin permissions",
+  PERMISSION_DENIED: "You do not have permission to perform this action",
 }

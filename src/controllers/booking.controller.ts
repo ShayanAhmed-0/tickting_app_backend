@@ -208,7 +208,8 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
     
     // Calculate total price using the DFW hub pricing system
     const baseFare = await calculateFare(routeId, tripType);
-    let getTotalPrice = baseFare * passengers.length;
+    let getTotalPrice = (baseFare * passengers.length) + parseFloat(additionalBaggage || 0);
+    
     if(paymentType === "stripe") {
     // Add passengers data in redis with unique key and send that key in payment intent
     const { v4: uuidv4 } = require('uuid');
@@ -229,13 +230,13 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       }
     }
 
-    const paymentIntent = await createPaymentIntent(getTotalPrice, {
+    const paymentIntent = await createPaymentIntent(getTotalPrice + (getTotalPrice * 0.10), {
       routeId: routeId,
       userId: userId,
       bookedBy: bookedBy,
       office: office,
-      salesOffice: salesOffice,
-      totalPrice: getTotalPrice,
+      salesOffice: salesOffice.toString(),
+      totalPrice: getTotalPrice + (getTotalPrice * 0.10),
       seats: getUserSeats.length,
       baseFare: baseFare,
       busId: getBus._id?.toString() || busId,
