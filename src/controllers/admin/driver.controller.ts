@@ -9,9 +9,9 @@ import bcrypt from "bcrypt";
 import ProfileModel from "../../models/profile.model";
 import { UserRole, TripStatus } from "../../models";
 import helper from "../../helper";
-import TripModel from "../../models/trip.model";
-import RouteModel from "../../models/route.model";
-import BusModel from "../../models/bus.model";
+// import TripModel from "../../models/trip.model";
+// import RouteModel from "../../models/route.model";
+// import BusModel from "../../models/bus.model";
 export const createDriver = async (req: Request, res: Response) => {
     try {
     let { firstName, secondName, lastName, email, password, driverLicenseId } = req.body;

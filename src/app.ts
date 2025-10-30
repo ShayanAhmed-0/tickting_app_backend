@@ -11,7 +11,7 @@ import { API_PREFIX } from "./config/environment";
 import authRoutes from "./routes/auth.routes";
 import adminMiscRoutes from "./routes/admin/misc.routes";
 import miscRoutes from "./routes/misc.routes";
-import webRoutes from "./routes/web/general.routes";
+// import webRoutes from "./routes/web/general.routes";
 import crypto from "crypto";
 import adminDriverRoutes from "./routes/admin/driver.routes";
 import adminBusRoutes from "./routes/admin/bus.routes";
@@ -77,6 +77,6 @@ app.use(`${API_PREFIX}/admin/permissions`, adminPermissionRoutes);
 // app.use(`${API_PREFIX}/admin/misc`, adminMiscRoutes);
 // booking routes (real-time seat booking)
 // web routes
-app.use(`/api`, webRoutes);
+// app.use(`/api`, webRoutes);
 
 export default app;

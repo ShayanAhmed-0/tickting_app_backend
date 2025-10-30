@@ -7,9 +7,9 @@ import RouteModel from "../../models/route.model";
 import Destination from "../../models/destinations.model";
 import Bus from "../../models/bus.model";
 import helper from "../../helper";
-import { SeatStatus, TripType } from "../../models/tours.models";
+// import {  TripType } from "../../models/tours.models";
 import { calculateFare } from "../../utils/pricing";
-import { DaysEnums } from "../../models/common/types";
+import { DaysEnums, TripType } from "../../models/common/types";
 
 // Helper function to convert JavaScript day number (0-6) to DaysEnums string
 const getDayEnumFromNumber = (dayNumber: number): string => {

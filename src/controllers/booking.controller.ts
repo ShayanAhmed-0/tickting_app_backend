@@ -14,7 +14,7 @@ import { ForWho, SeatStatus, TripType, UserRole, TicketStatus } from "../models/
 import { io } from "../server";
 import AuthModel from "../models/auth.model";
 import { redis, RedisKeys } from "../config/redis";
-import { Booking, Profile } from "../models";
+import { Profile } from "../models";
 import helper from "../helper";
 import { TicketPDFGenerator, TicketPDFData } from "../utils/PDF/ticketPDFGenerator";
 import { calculatePassengerFare, calculateFare } from "../utils/pricing";
