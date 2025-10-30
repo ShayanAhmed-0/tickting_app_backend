@@ -283,7 +283,7 @@ export const getRoutes = async (req: Request, res: Response) => {
     // Build populate options
     const populateOptions = [
       { path: "origin", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
-      { path: "destination", select: "name description priceToDFW priceFromDFW priceRoundTrip" },
+      { path: "destination", select: "name description priceToDFW priceFromDFW priceRoundTrip MinutesOfDifference" },
       { path: "bus", select: "code serialNumber capacity seatLayout amenities" },
       { path: "intermediateStops", select: "name description" }
     ];
