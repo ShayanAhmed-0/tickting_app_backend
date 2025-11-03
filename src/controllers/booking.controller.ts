@@ -215,9 +215,10 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
     const { v4: uuidv4 } = require('uuid');
     const passengersRedisKey = `booking:passengers:${uuidv4()}`;
     await redis.set(passengersRedisKey, JSON.stringify(passengers), 'EX', 15 * 60); // expires in 15 min
-    
+    // 
     // Extend seat hold timer to give user enough time to complete payment (20 minutes)
     const extendedHoldDuration = 20 * 60; // 20 minutes in seconds
+    // const extendedHoldDuration = 20 * 60; // 20 minutes in seconds
     for (const seatLabel of seatLabels) {
       const holdKey = RedisKeys.seatHold(routeId, seatLabel);
       const holdData = await redis.get(holdKey);
