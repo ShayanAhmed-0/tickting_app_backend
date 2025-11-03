@@ -235,7 +235,7 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       userId: userId,
       bookedBy: bookedBy,
       office: office,
-      salesOffice: salesOffice.toString(),
+      salesOffice: salesOffice?.toString() || "",
       totalPrice: getTotalPrice + (getTotalPrice * 0.10),
       seats: getUserSeats.length,
       baseFare: baseFare,
