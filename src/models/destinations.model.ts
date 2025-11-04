@@ -26,7 +26,7 @@ const DestinationSchema = new Schema<IDestination>({
   priceToDFW: { type: Number, required: true },
   priceFromDFW: { type: Number, required: true },
   priceRoundTrip: { type: Number, required: true },
-  salesOffice: { type: Schema.Types.ObjectId, ref: "Office", required: true },
+  salesOffice: [{ type: Schema.Types.ObjectId, ref: "Office", required: true }],
   MinutesOfDifference: { type: Number, required: true },
   TerminalOfReference: { type: Schema.Types.ObjectId, ref: "Destination", required: false },
   isTerminal: { type: Boolean, default: false },

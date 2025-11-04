@@ -15,6 +15,7 @@ import helper from "../../helper";
 export const createDriver = async (req: Request, res: Response) => {
     try {
     let { firstName, secondName, lastName, email, password, driverLicenseId } = req.body;
+    email=email.toLowerCase();
     const userExist = await AuthModel.findOne({ email });
     if (userExist) {
       throw new CustomError(STATUS_CODES.BAD_REQUEST, AUTH_CONSTANTS.USER_ALREADY_EXISTS);
@@ -65,7 +66,8 @@ export const getDrivers = async (req: Request, res: Response) => {
 export const updateDriver = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { firstName, secondName, lastName, driverLicenseId, email, password } = req.body;
+    let { firstName, secondName, lastName, driverLicenseId, userName, password } = req.body;
+    const email=userName.toLowerCase();
     const driver = await AuthModel.findById(id).populate("profile");
     if (!driver) {
       throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.DRIVER_NOT_FOUND);

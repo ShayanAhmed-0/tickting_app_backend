@@ -6,7 +6,7 @@ export const createDestinationSchema: ZodSchema<{
   priceToDFW: number;
   priceFromDFW: number;
   priceRoundTrip: number;
-  salesOffice: string;
+  salesOffice: string[];
   MinutesOfDifference: number;
   TerminalOfReference?: string;
   isTerminal?: boolean;
@@ -32,8 +32,13 @@ export const createDestinationSchema: ZodSchema<{
     .positive("Round trip price must be a positive number")
     .finite("Round trip price must be a valid number"),
   
-  salesOffice: z.string()
-    .regex(/^[0-9a-fA-F]{24}$/, "Sales office must be a valid MongoDB ObjectId"),
+  salesOffice: z.array(z.string())
+    .min(1, "Sales office is required")
+    .max(10, "Sales office must be less than 10")
+    .refine(
+      (salesOffice) => salesOffice.every((office) => office.match(/^[0-9a-fA-F]{24}$/)),
+      { message: "Sales office must be a valid MongoDB ObjectId" }
+    ),
   
   MinutesOfDifference: z.number()
     .int("Minutes difference must be an integer")
@@ -54,7 +59,7 @@ export const updateDestinationSchema: ZodSchema<{
   priceToDFW?: number;
   priceFromDFW?: number;
   priceRoundTrip?: number;
-  salesOffice?: string;
+  salesOffice?: string[];
   MinutesOfDifference?: number;
   TerminalOfReference?: string;
   isTerminal?: boolean;
@@ -78,8 +83,13 @@ export const updateDestinationSchema: ZodSchema<{
     .positive("Round trip price must be a positive number")
     .finite("Round trip price must be a valid number")
     .optional(),
-  salesOffice: z.string()
-    .regex(/^[0-9a-fA-F]{24}$/, "Sales office must be a valid MongoDB ObjectId")
+  salesOffice: z.array(z.string())
+    .min(1, "Sales office is required")
+    .max(10, "Sales office must be less than 10")
+    .refine(
+      (salesOffice) => salesOffice.every((office) => office.match(/^[0-9a-fA-F]{24}$/)),
+      { message: "Sales office must be a valid MongoDB ObjectId" }
+    )
     .optional(),
   MinutesOfDifference: z.number()
     .int("Minutes difference must be an integer")

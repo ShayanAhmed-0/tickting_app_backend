@@ -5,7 +5,8 @@ import { UserRole } from "../../models/common/types";
 export const createAgentSchema: ZodSchema<{
   username: string;
   firstName: string;
-  lastName: string;
+  secondName?: string;
+  lastName?: string;
   role: UserRole;
   password: string;
   isActive?: boolean;
@@ -17,11 +18,9 @@ export const createAgentSchema: ZodSchema<{
     .min(1, "First name is required")
     .max(50, "First name must be less than 50 characters"),
 
-  secondName: z.string().min(1, "Second name is required"),
+  secondName: z.string().optional(),
   
-  lastName: z.string()
-    .min(1, "Last name is required")
-    .max(50, "Last name must be less than 50 characters"),
+  lastName: z.string().optional(),
   
   role: z.nativeEnum(UserRole, {
     errorMap: () => ({ message: "Invalid role selected" })
@@ -55,11 +54,9 @@ export const updateAgentSchema: ZodSchema<{
     .max(50, "First name must be less than 50 characters")
     .optional(),
   
-  secondName: z.string().min(1, "Second name is required").optional(),
+  secondName: z.string().optional(),
   
   lastName: z.string()
-    .min(1, "Last name is required")
-    .max(50, "Last name must be less than 50 characters")
     .optional(),
   
   role: z.nativeEnum(UserRole, {

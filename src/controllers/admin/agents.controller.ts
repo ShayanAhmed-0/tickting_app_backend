@@ -13,7 +13,7 @@ import bcrypt from "bcrypt";
 // Create Agent
 export const createAgent = async (req: Request, res: Response) => {
   try {
-    const { 
+    let { 
       username, 
       firstName, 
       secondName,
@@ -23,6 +23,7 @@ export const createAgent = async (req: Request, res: Response) => {
       salesOfficeId, 
       isActive = true 
     } = req.body;
+    username = username.toLowerCase();
 
     // Check if auth with same email already exists
     const existingAuth = await AuthModel.findOne({
@@ -77,7 +78,7 @@ export const createAgent = async (req: Request, res: Response) => {
 
     // Populate the response
     const populatedAuth = await AuthModel.findById(savedAuth._id)
-      .populate([{path: 'profile', select: 'firstName lastName secondName role office'}, {path: 'office', select: 'name'}])
+      .populate([{path: 'profile', select: 'firstName lastName secondName role office',populate: {path: 'office', select: 'name'}}])
       .select('-password');
 
     return ResponseUtil.successResponse(
@@ -123,7 +124,7 @@ export const getAgents = async (req: Request, res: Response) => {
     const options = {
       page: Number(page) || 1,
       limit: Number(limit) || 10,
-      sort: { createdAt: -1 } as Record<string, 1 | -1>,
+      sort: { updatedAt: -1 } as Record<string, 1 | -1>,
       populate: [
         { path: "profile", select: "firstName lastName secondName role", populate: { path: "office", select: "name description" } }
       ]

@@ -5,6 +5,7 @@ import { ADMIN_CONSTANTS } from "../../constants/messages";
 import { CustomError } from "../../classes/CustomError";
 import Destination from "../../models/destinations.model";
 import helper from "../../helper";
+import mongoose from "mongoose";
 
 
 export const createDestinations = async (req: Request, res: Response) => {
@@ -25,6 +26,7 @@ export const createDestinations = async (req: Request, res: Response) => {
     // Check if destination with same name already exists
     const existingDestination = await Destination.findOne({
       name: name,
+      isDeleted: false,
     });
 
     if (existingDestination) {
@@ -76,15 +78,18 @@ export const createDestinations = async (req: Request, res: Response) => {
 
 export const getDestinations = async (req: Request, res: Response) => {
   try {
-    const { page, limit, name } = req.query;
-    const query: any = { isActive: true, isDeleted: false };
+    const { page, limit, name,isTerminal } = req.query;
+    let query: any = { isActive: true, isDeleted: false };
+    if (isTerminal !== undefined) {
+      query.isTerminal = isTerminal === 'true'? true : false;
+    }
     if (name && typeof name === "string" && name.trim() !== "") {
       query.name = { $regex: name.trim(), $options: "i" };
     }
     const options = {
       page: Number(page),
       limit: Number(limit),
-      sort: { createdAt: -1 } as Record<string, 1 | -1>,
+      sort: { updatedAt: -1 } as Record<string, 1 | -1>,
       populate: [
         { path: "salesOffice", select: "name description" },
         { path: "TerminalOfReference", select: "name description" }
@@ -109,11 +114,11 @@ export const updateDestination = async (req: Request, res: Response) => {
     if (priceToDFW) updateData.priceToDFW = priceToDFW;
     if (priceFromDFW) updateData.priceFromDFW = priceFromDFW;
     if (priceRoundTrip) updateData.priceRoundTrip = priceRoundTrip;
-    if (salesOffice) updateData.salesOffice = salesOffice;
+    if (salesOffice) updateData.salesOffice = salesOffice.map((office: string) => new mongoose.Types.ObjectId(office));
     if (MinutesOfDifference) updateData.MinutesOfDifference = MinutesOfDifference;
     if (TerminalOfReference) updateData.TerminalOfReference = TerminalOfReference;
-    if (isTerminal) updateData.isTerminal = isTerminal;
-    if (isActive) updateData.isActive = isActive;
+    if (typeof isTerminal === 'boolean') updateData.isTerminal = isTerminal;
+    if (typeof isActive === 'boolean') updateData.isActive = isActive;
     const destination = await Destination.findByIdAndUpdate(id, updateData, { new: true });
     if (!destination) {
       throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.DESTINATION_NOT_FOUND);

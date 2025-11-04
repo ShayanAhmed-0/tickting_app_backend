@@ -605,6 +605,7 @@ export const getRouteById = async (req: Request, res: Response) => {
         ).length;
       }
       const fare = await calculateFare(routeObj._id as string, tripType as string);
+      (routeObj as any).tax = parseFloat((fare * 0.10).toFixed(2)) as any;
       (routeObj as any).baseFare = fare as any;
       const routeWithSeatInfo = {
         ...routeObj,
