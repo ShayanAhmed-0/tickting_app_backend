@@ -106,11 +106,12 @@ export const getRoutes = async (req: Request, res: Response) => {
     const query: any = {};
 
     // Active status filter
-    if (isActive !== undefined) {
-      query.isActive = isActive === 'true';
-    } else {
-      query.isActive = true; // Default to active routes
-    }
+    // if (isActive !== undefined) {
+    //   query.isActive = isActive === 'true';
+    // } 
+    // else {
+    //   query.isActive = true; // Default to active routes
+    // }
 
     // Origin filter
     if (origin) {

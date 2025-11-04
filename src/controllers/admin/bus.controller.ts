@@ -8,56 +8,174 @@ import { SeatLayoutType, SeatType, Seat, SeatStatus } from "../../models/common/
 import helper from "../../helper";
 
 // Function to dynamically generate seat layout based on bus capacity
-// Standard layout: 4 seats per row (2 right + 2 left)
-// Seat numbering: 1-2 (right), 3-4 (left), 5-6 (right), 7-8 (left), etc.
+// Standard layout: 4 seats per row (2 right + 2 left) for normal rows
+// Last 4 seats: 2 rows with 2 seats each, all on the right side
+// Example for 56 seats: Rows 1-13 have 4 seats each, Rows 14-15 have 2 seats each (right only)
 const generateSeatLayout = (capacity: number) => {
   const seats: Seat[] = [];
   
-  // Standard bus layout: 4 seats per row (2 right + 2 left)
-  // Pattern per row: [2,1] (right), [4,3] (left) for row 1
-  //                  [6,5] (right), [8,7] (left) for row 2, etc.
-  const seatsPerRow = 4;
-  const totalRows = Math.ceil(capacity / seatsPerRow);
+  // Calculate how many normal rows (4 seats) and special rows (2 seats on right only)
+  // Last 4 seats will be in 2 rows of 2 seats each on the right
+  const normalSeats = capacity >= 4 ? capacity - 4 : 0; // All seats except last 4
+  const normalRows = Math.floor(normalSeats / 4); // Complete rows of 4 seats
+  const remainingInNormalRow = normalSeats % 4; // Seats in partial row before last 4
   
+  let seatNumber = 1;
   let seatIndex = 1;
+  let currentRow = 1;
   
-  for (let row = 1; row <= totalRows; row++) {
+  // Generate normal rows (4 seats: 2 right + 2 left)
+  for (let row = 1; row <= normalRows; row++) {
     // Calculate base seat number for this row
     const baseNum = (row - 1) * 4 + 1;
     
-    // Row pattern: [baseNum+1, baseNum, baseNum+3, baseNum+2]
-    // Which is: [2, 1, 4, 3] for row 1, [6, 5, 8, 7] for row 2, etc.
+    // Row pattern: [baseNum+1, baseNum] (right), [baseNum+3, baseNum+2] (left)
+    // Which is: [2, 1] (right), [4, 3] (left) for row 1
     const rowSeats = [
-      { num: baseNum + 1, position: 'right', column: 1 },  // Right column 1 (even: 2, 6, 10...)
-      { num: baseNum,     position: 'right', column: 2 },  // Right column 2 (odd: 1, 5, 9...)
-      { num: baseNum + 3, position: 'left',  column: 1 },  // Left column 1 (even: 4, 8, 12...)
-      { num: baseNum + 2, position: 'left',  column: 2 }   // Left column 2 (odd: 3, 7, 11...)
+      { num: baseNum + 1, position: 'right', column: 1 },  // Right column 1
+      { num: baseNum,     position: 'right', column: 2 },  // Right column 2
+      { num: baseNum + 3, position: 'left',  column: 1 },  // Left column 1
+      { num: baseNum + 2, position: 'left',  column: 2 }   // Left column 2
     ];
     
     for (const seat of rowSeats) {
-      if (seat.num <= capacity) {
-        seats.push({
-          seatLabel: seat.num.toString(),
-          seatIndex: seatIndex,
-          type: SeatType.REGULAR,
-          isAvailable: true,
-          status: SeatStatus.AVAILABLE,
-          meta: {
-            seatNumber: seat.num,
-            row: row,
-            position: seat.position,
-            section: seat.position,
-            column: seat.column
-          }
-        });
-        seatIndex++;
+      seats.push({
+        seatLabel: seat.num.toString(),
+        seatIndex: seatIndex,
+        type: SeatType.REGULAR,
+        isAvailable: true,
+        status: SeatStatus.AVAILABLE,
+        meta: {
+          seatNumber: seat.num,
+          row: row,
+          position: seat.position,
+          section: seat.position,
+          column: seat.column
+        }
+      });
+      seatIndex++;
+      seatNumber++;
+    }
+    currentRow++;
+  }
+  
+  // Handle remaining seats in partial row before last 4
+  if (remainingInNormalRow > 0) {
+    const baseNum = normalRows * 4 + 1;
+    const partialRowSeats = [
+      { num: baseNum + 1, position: 'right', column: 1 },
+      { num: baseNum,     position: 'right', column: 2 },
+      { num: baseNum + 3, position: 'left',  column: 1 },
+      { num: baseNum + 2, position: 'left',  column: 2 }
+    ];
+    
+    for (let i = 0; i < remainingInNormalRow; i++) {
+      const seat = partialRowSeats[i];
+      seats.push({
+        seatLabel: seat.num.toString(),
+        seatIndex: seatIndex,
+        type: SeatType.REGULAR,
+        isAvailable: true,
+        status: SeatStatus.AVAILABLE,
+        meta: {
+          seatNumber: seat.num,
+          row: currentRow,
+          position: seat.position,
+          section: seat.position,
+          column: seat.column
+        }
+      });
+      seatIndex++;
+      seatNumber++;
+    }
+    currentRow++;
+  }
+  
+  // Generate last 4 seats: 2 rows with 2 seats each (all on right)
+  if (capacity >= 4) {
+    // Row with seats capacity-3 and capacity-2 (both on right)
+    seats.push({
+      seatLabel: (capacity - 3).toString(),
+      seatIndex: seatIndex++,
+      type: SeatType.REGULAR,
+      isAvailable: true,
+      status: SeatStatus.AVAILABLE,
+      meta: {
+        seatNumber: capacity - 3,
+        row: currentRow,
+        position: 'right',
+        section: 'right',
+        column: 1
       }
+    });
+    seats.push({
+      seatLabel: (capacity - 2).toString(),
+      seatIndex: seatIndex++,
+      type: SeatType.REGULAR,
+      isAvailable: true,
+      status: SeatStatus.AVAILABLE,
+      meta: {
+        seatNumber: capacity - 2,
+        row: currentRow,
+        position: 'right',
+        section: 'right',
+        column: 2
+      }
+    });
+    currentRow++;
+    
+    // Row with seats capacity-1 and capacity (both on right)
+    seats.push({
+      seatLabel: (capacity - 1).toString(),
+      seatIndex: seatIndex++,
+      type: SeatType.REGULAR,
+      isAvailable: true,
+      status: SeatStatus.AVAILABLE,
+      meta: {
+        seatNumber: capacity - 1,
+        row: currentRow,
+        position: 'right',
+        section: 'right',
+        column: 1
+      }
+    });
+    seats.push({
+      seatLabel: capacity.toString(),
+      seatIndex: seatIndex++,
+      type: SeatType.REGULAR,
+      isAvailable: true,
+      status: SeatStatus.AVAILABLE,
+      meta: {
+        seatNumber: capacity,
+        row: currentRow,
+        position: 'right',
+        section: 'right',
+        column: 2
+      }
+    });
+  } else {
+    // For buses with less than 4 seats, just add remaining seats normally
+    for (let i = seatNumber; i <= capacity; i++) {
+      seats.push({
+        seatLabel: i.toString(),
+        seatIndex: seatIndex++,
+        type: SeatType.REGULAR,
+        isAvailable: true,
+        status: SeatStatus.AVAILABLE,
+        meta: {
+          seatNumber: i,
+          row: currentRow,
+          position: 'right',
+          section: 'right',
+          column: ((i - seatNumber) % 2) + 1
+        }
+      });
     }
   }
 
   return {
     type: SeatLayoutType.STANDARD,
-    seats: seats.slice(0, capacity) // Ensure we only return exactly 'capacity' seats
+    seats: seats
   };
 };
 
@@ -139,7 +257,7 @@ export const getBuses = async (req: Request, res: Response) => {
     const options = {
       page: Number(page),
       limit: Number(limit),
-      sort: { createdAt: -1 } as Record<string, 1 | -1>,
+      sort: { updatedAt: -1 } as Record<string, 1 | -1>,
       populate: [{ path: "driver", select: "profile", populate: { path: "profile", select: "firstName secondName lastName" } }, { path: "mxdriverId", select: "profile", populate: { path: "profile", select: "firstName secondName lastName" } }],
     };
     const buses = await helper.PaginateHelper.customPaginate("buses", Bus, query, options);
