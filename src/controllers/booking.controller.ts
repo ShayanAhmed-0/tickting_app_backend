@@ -555,7 +555,13 @@ export const getLatestBooking = async (req: CustomRequest, res: Response) => {
     const latestBooking = await PassengerModel.findOne({ user: userId }).sort({ createdAt: -1 });
     
     if(!latestBooking) {
-      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "No bookings found");
+      // return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "No bookings found");
+      return ResponseUtil.successResponse(
+        res,
+        STATUS_CODES.SUCCESS,
+        { latestBooking: [] },
+        "No bookings found"
+      );
     }
 
     // Check if it's a family booking
