@@ -330,6 +330,14 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
         userId: userId,
         busId: busId
       });
+      io.to(`route:${routeId}:${departureDate}`).emit('seat:status:changed', {
+        routeId: routeId,
+        seatLabel: passenger.seatLabel,
+        status: SeatStatus.BOOKED,
+        userId: userId,
+        busId: busId,
+        departureDate: departureDate
+      });
     }
 
     // Generate individual QR codes for each passenger/seat
