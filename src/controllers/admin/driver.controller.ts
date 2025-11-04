@@ -66,22 +66,23 @@ export const getDrivers = async (req: Request, res: Response) => {
 export const updateDriver = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    let { firstName, secondName, lastName, driverLicenseId, userName, password } = req.body;
-    const email=userName.toLowerCase();
-    const driver = await AuthModel.findById(id).populate("profile");
-    if (!driver) {
-      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.DRIVER_NOT_FOUND);
-    }
-    if (email && email !== driver.email) {
+    let { firstName, secondName, lastName, driverLicenceId, userName, password } = req.body;
+    if (userName) {
+      const email=userName.toLowerCase();
+      userName=email
       const emailExist = await AuthModel.findOne({ email });
       if (emailExist) {
         throw new CustomError(STATUS_CODES.BAD_REQUEST, AUTH_CONSTANTS.USER_ALREADY_EXISTS);
       }
     }
+    const driver = await AuthModel.findById(id).populate("profile");
+    if (!driver) {
+      throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.DRIVER_NOT_FOUND);
+    }
 
     // Update Auth model fields
     const authUpdateData: any = {};
-    if (email) authUpdateData.email = email;
+    if (userName) authUpdateData.email = userName;
     if (password) {
       const salt = await bcrypt.genSalt(Number(SALT_ROUNDS));
       const hashPassword = await bcrypt.hash(password, salt);
@@ -93,15 +94,27 @@ export const updateDriver = async (req: Request, res: Response) => {
     if (firstName) profileUpdateData.firstName = firstName;
     if (secondName) profileUpdateData.secondName = secondName;
     if (lastName) profileUpdateData.lastName = lastName;
-    if (driverLicenseId) profileUpdateData["documents.driverLicenseId"] = driverLicenseId;
+    
+    // Handle nested documents update separately
+    const nestedUpdates: any = {};
+    if (driverLicenceId) {
+      nestedUpdates["documents.driverLicenseId"] = driverLicenceId;
+    }
 
     // Update both models
     if (Object.keys(authUpdateData).length > 0) {
       await AuthModel.findByIdAndUpdate(id, authUpdateData);
     }
     
-    if (Object.keys(profileUpdateData).length > 0 && driver.profile) {
-      await ProfileModel.findByIdAndUpdate((driver.profile as any)._id, profileUpdateData);
+    if (driver.profile) {
+      // Update simple fields
+      if (Object.keys(profileUpdateData).length > 0) {
+        await ProfileModel.findByIdAndUpdate((driver.profile as any)._id, profileUpdateData);
+      }
+      // Update nested fields using $set
+      if (Object.keys(nestedUpdates).length > 0) {
+        await ProfileModel.findByIdAndUpdate((driver.profile as any)._id, { $set: nestedUpdates });
+      }
     }
 
     // Fetch updated driver with populated profile

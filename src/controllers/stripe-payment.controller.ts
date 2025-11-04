@@ -147,7 +147,8 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       const availability = await departureDateSeatService.isSeatAvailableForDate(
         busId,
         seat.seatLabel,
-        new Date(departureDate)
+        new Date(departureDate),
+        userId
       );
       
       if (!availability.available) {
