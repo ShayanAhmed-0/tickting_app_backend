@@ -58,7 +58,7 @@ export class SeatBookingService {
       }
       
       // Check if seat is available for this departure date using the departure date service
-      const availability = await departureDateSeatService.isSeatAvailableForDate(busId, seatLabel, departureDate);
+      const availability = await departureDateSeatService.isSeatAvailableForDate(busId, seatLabel, departureDate,userId);
       
       if (!availability.available) {
         // Check if it's held by the same user (allow extending hold)

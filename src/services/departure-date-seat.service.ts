@@ -67,7 +67,8 @@ export class DepartureDateSeatService {
   async isSeatAvailableForDate(
     busId: string, 
     seatLabel: string, 
-    departureDate: Date
+    departureDate: Date,
+    userId: string
   ): Promise<{ available: boolean; reason?: string; currentBooking?: any }> {
     try {
       const bus = await BusModel.findById(busId);
@@ -90,7 +91,10 @@ export class DepartureDateSeatService {
       if (existingBooking) {
         // Check if booking is expired (for held seats)
         if (existingBooking.status === SeatStatus.SELECTED && existingBooking.expiresAt) {
-          if (new Date() > existingBooking.expiresAt) {
+          if(existingBooking.userId.toString() === userId) {
+            return { available: true };
+          }
+          else if (new Date() > existingBooking.expiresAt) {
             // Booking expired, remove it
             await this.removeExpiredBooking(busId, seatLabel, departureDate);
             return { available: true };
@@ -123,7 +127,7 @@ export class DepartureDateSeatService {
   ): Promise<{ success: boolean; reason?: string; expiresAt?: Date }> {
     try {
       // Check if seat is available
-      const availability = await this.isSeatAvailableForDate(busId, seatLabel, departureDate);
+      const availability = await this.isSeatAvailableForDate(busId, seatLabel, departureDate,userId);
       if (!availability.available) {
         return { success: false, reason: availability.reason };
       }
@@ -184,7 +188,7 @@ export class DepartureDateSeatService {
   ): Promise<{ success: boolean; reason?: string }> {
     try {
       // First, check if seat is held by this user or available
-      const availability = await this.isSeatAvailableForDate(busId, seatLabel, departureDate);
+      const availability = await this.isSeatAvailableForDate(busId, seatLabel, departureDate,userId);
       
       if (!availability.available) {
         // Check if it's held by the same user
