@@ -54,7 +54,7 @@ export const createRoute = async (req: Request, res: Response) => {
       bus,
       dayTime,
       intermediateStops: intermediateStops || [],
-      isActive: isActive !== undefined ? isActive : true,
+      isActive: isActive !== undefined ? isActive?true:false : true,
     });
 
     const savedRoute = await newRoute.save();
@@ -106,9 +106,9 @@ export const getRoutes = async (req: Request, res: Response) => {
     const query: any = {};
 
     // Active status filter
-    // if (isActive !== undefined) {
-    //   query.isActive = isActive === 'true';
-    // } 
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true'?true:false;
+    } 
     // else {
     //   query.isActive = true; // Default to active routes
     // }
@@ -274,7 +274,7 @@ export const getRoutes = async (req: Request, res: Response) => {
   //   }  
 
     // Build sort options
-    let sortOptions: Record<string, 1 | -1> = { createdAt: -1 };
+    let sortOptions: Record<string, 1 | -1> = { updatedAt: -1 };
     
     if (sortBy) {
       const order = sortOrder === 'asc' ? 1 : -1;
@@ -831,7 +831,7 @@ export const updateRoute = async (req: Request, res: Response) => {
     if (bus) updateData.bus = bus;
     if (dayTime) updateData.dayTime = dayTime;
     if (intermediateStops) updateData.intermediateStops = intermediateStops;
-    if (isActive) updateData.isActive = isActive;
+    if (typeof isActive === 'boolean') updateData.isActive = isActive?true:false;
     const route = await RouteModel.findByIdAndUpdate(id, updateData, { new: true });
     if (!route) {
       throw new CustomError(STATUS_CODES.NOT_FOUND, ADMIN_CONSTANTS.ROUTE_NOT_FOUND);
