@@ -516,15 +516,15 @@ export const getDashboard = async (req: CustomRequest, res: Response) => {
 
 export const updateCurrency = async (req: CustomRequest, res: Response) => {
   try {
-    let { usd, mxn } = req.body;
+    let { USD, MXN } = req.body;
     const getCurrency = await currencyModel.findOne();
     // if (!getCurrency) {
     //   throw new CustomError(STATUS_CODES.NOT_FOUND, MISC_CONSTANTS.CURRENCY_NOT_FOUND);
     // }
-    if(!usd) usd = getCurrency?.USD;
-    if(!mxn) mxn = getCurrency?.MXN;
+    if(!USD) USD = getCurrency?.USD;
+    if(!MXN) MXN = getCurrency?.MXN;
 
-    const currency = await currencyModel.create({ USD: usd, MXN: mxn });
+    const currency = await currencyModel.create({ USD: USD, MXN: MXN });
     // const currency = await currencyModel.updateOne({ USD: usd, MXN: mxn });
     return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, { currency }, MISC_CONSTANTS.CURRENCY_UPDATED);
   } catch (err) {
