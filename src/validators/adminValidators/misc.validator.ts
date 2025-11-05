@@ -1,9 +1,9 @@
 import { z, ZodSchema } from "zod";
 
 export const updateCurrencySchema: ZodSchema<{
-  usd: number;
-  mxn: number;
+  USD: number;
+  MXN: number;
 }> = z.object({
-  usd: z.number(),
-  mxn: z.number(),
+  USD: z.number(),
+  MXN: z.number(),
 });
