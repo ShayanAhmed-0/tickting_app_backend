@@ -10,6 +10,7 @@ import PaymentTransaction from "../models/payment-transaction.model";
 import { QRCodeUtils } from "../utils/QRCode";
 import { SeatStatus, PaymentGateway, TransactionStatus } from "../models/common/types";
 import { io } from "../server";
+import notificationService from "../services/notification.service";
 
 const stripe = new Stripe(STRIPE_SECRET_KEY as string);
 
@@ -355,8 +356,45 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
     console.log('Passengers created:', passengersDB.length);
     console.log('Trip type:', tripType);
 
-    // TODO: Send confirmation email/notification to user with QR code
-    // You can implement email sending here with the qrCodeBase64
+    // Send booking confirmation and payment receipt notifications
+    try {
+      const seatNumbers = passengersData.map((p: any) => p.seatLabel);
+      const firstPassenger = passengersDB[0];
+      
+      // Send booking confirmation notification
+      await notificationService.sendBookingConfirmation(
+        userId,
+        {
+          bookingRef: groupTicketSerial || firstPassenger.ticketNumber,
+          origin: (getRoutePrice as any)?.origin?.name || "Origin",
+          destination: (getRoutePrice as any)?.destination?.name || "Destination",
+          departureTime: new Date(departureDate),
+          seatNumbers: seatNumbers,
+          amount: paymentIntent.amount / 100,
+          currency: paymentIntent.currency.toUpperCase(),
+          bookingId: (firstPassenger._id as any).toString(),
+          tripId: routeId,
+          routeId: routeId
+        }
+      );
+
+      // Send payment receipt notification
+      await notificationService.sendPaymentReceipt(
+        userId,
+        {
+          bookingRef: groupTicketSerial || firstPassenger.ticketNumber,
+          amount: paymentIntent.amount / 100,
+          currency: paymentIntent.currency.toUpperCase(),
+          paymentId: paymentIntent.id,
+          bookingId: (firstPassenger._id as any).toString()
+        }
+      );
+
+      console.log('✅ Booking and payment notifications sent successfully');
+    } catch (notifError) {
+      console.error('❌ Error sending notifications:', notifError);
+      // Don't fail the booking if notification fails
+    }
 
   } catch (error) {
     console.error('Error handling payment success:', error);

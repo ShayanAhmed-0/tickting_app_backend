@@ -14,6 +14,7 @@ import { AUTH_CONSTANTS } from "../constants/messages";
 import { io } from "../server";
 import { redis, RedisKeys } from "../config/redis";
 import { departureDateSeatService } from "../services/departure-date-seat.service";
+import notificationService from "../services/notification.service";
 
 const stripe = new Stripe(STRIPE_SECRET_KEY as string);
 
@@ -396,6 +397,45 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
     // Clean up passengers data from Redis since booking is complete
     if (metadata.passengersRedisKey) {
       await redis.del(metadata.passengersRedisKey);
+    }
+
+    // Send booking confirmation and payment receipt notifications
+    try {
+      const seatNumbers = passengersData.map((p: any) => p.seatLabel);
+      
+      // Send booking confirmation notification
+      await notificationService.sendBookingConfirmation(
+        userId,
+        {
+          bookingRef: groupTicketSerial || passengersDB[0].ticketNumber,
+          origin: (getRoutePrice as any)?.origin?.name || "Origin",
+          destination: (getRoutePrice as any)?.destination?.name || "Destination",
+          departureTime: new Date(departureDate),
+          seatNumbers: seatNumbers,
+          amount: paymentIntent.amount / 100,
+          currency: paymentIntent.currency.toUpperCase(),
+          bookingId: (passengersDB[0] as any)._id.toString(),
+          tripId: routeId,
+          routeId: routeId
+        }
+      );
+
+      // Send payment receipt notification
+      await notificationService.sendPaymentReceipt(
+        userId,
+        {
+          bookingRef: groupTicketSerial || passengersDB[0].ticketNumber,
+          amount: paymentIntent.amount / 100,
+          currency: paymentIntent.currency.toUpperCase(),
+          paymentId: paymentIntent.id,
+          bookingId: (passengersDB[0] as any)._id.toString()
+        }
+      );
+
+      console.log('✅ Booking and payment notifications sent successfully');
+    } catch (notifError) {
+      console.error('❌ Error sending notifications:', notifError);
+      // Don't fail the booking if notification fails
     }
 
     // Return the same response format as cash payment

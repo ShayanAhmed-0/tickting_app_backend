@@ -151,6 +151,22 @@ export enum NotificationType {
   INAPP = "inapp",
 }
 
+export enum NotificationCategory {
+  BOOKING_CONFIRMATION = "booking_confirmation",
+  TRIP_REMINDER_24H = "trip_reminder_24h",
+  TRIP_REMINDER_2H = "trip_reminder_2h",
+  TRIP_REMINDER_30M = "trip_reminder_30m",
+  SCHEDULE_CHANGE = "schedule_change",
+  SCHEDULE_DELAY = "schedule_delay",
+  EMERGENCY_WEATHER = "emergency_weather",
+  EMERGENCY_CANCELLATION = "emergency_cancellation",
+  EMERGENCY_SAFETY = "emergency_safety",
+  ADMIN_BUS_CAPACITY = "admin_bus_capacity",
+  PAYMENT_RECEIPT = "payment_receipt",
+  REFUND_PROCESSED = "refund_processed",
+  BOOKING_CANCELLED = "booking_cancelled",
+}
+
 export enum DeliveryStatus {
   PENDING = "pending",
   SENT = "sent",
