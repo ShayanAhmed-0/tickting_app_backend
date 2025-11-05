@@ -145,6 +145,7 @@ class NotificationService {
             dataPayload.category = options.category;
 
             // Send to all devices
+            // Send to all devices
             const pushPromises = devices.map(device => 
               this.sendPushNotification({
                 token: device.deviceToken,
