@@ -63,11 +63,13 @@ const ProfileSchema = new Schema<IProfile>(
       unique: true,
     },
     refundAmount: { type: Number, default: 0 },
+    refundAmount: { type: Number, default: 0 },
     firstName: { type: String, required: true },
     secondName: { type: String },
     lastName: { type: String },
     dob: { type: Date },
     gender: {
+      type: String, 
       type: String, 
       enum: Object.values(Gender),
       default: Gender.PREFER_NOT_SAY,
