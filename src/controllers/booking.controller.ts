@@ -226,6 +226,7 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       console.error('Error checking bus capacity for outbound trip:', capacityError);
       // Don't fail the booking if capacity check fails
     }
+    // 
 
     // Check for return trip if round trip
     if(tripType === TripType.ROUND_TRIP && returnBus && returnRoute) {
