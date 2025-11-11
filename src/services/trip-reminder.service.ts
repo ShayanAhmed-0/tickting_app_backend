@@ -1,6 +1,10 @@
 import Booking from '../models/booking.model';
 import notificationService from './notification.service';
-import { PaymentStatus, BookingStatus } from '../models/common/types';
+import { PaymentStatus, BookingStatus, TicketStatus } from '../models/common/types';
+import PassengerModel from '../models/passenger.models';
+import BusModel from '../models/bus.model';
+import RouteModel from '../models/route.model';
+import mongoose from 'mongoose';
 
 interface TripReminderJob {
   checkAndSendReminders(): Promise<void>;
@@ -268,6 +272,170 @@ class TripReminderService implements TripReminderJob {
     } catch (error) {
       console.error('❌ Error checking bus capacity:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Check bus capacity for a specific bus and departure date
+   * Sends notification to admins if capacity >= 90%
+   * This is called immediately after a booking is completed
+   */
+  async checkBusCapacityForBooking(
+    busId: string,
+    routeId: string,
+    departureDate: Date,
+    passengersCount?: number
+  ): Promise<void> {
+    try {
+      // Get bus information
+      const bus = await BusModel.findById(busId);
+      if (!bus || !bus.seatLayout || !bus.seatLayout.seats) {
+        console.error('Bus not found or invalid seat layout:', busId);
+        return;
+      }
+
+      const totalSeats = bus.seatLayout.seats.length;
+      if (totalSeats === 0) {
+        console.warn('Bus has no seats:', busId);
+        return;
+      }
+
+      const inputDate = new Date(departureDate);
+
+    // 2. Extract the YYYY-MM-DD portion (always in UTC)
+    // We use UTC methods to ensure the date part is calculated consistently worldwide.
+    const year = inputDate.getUTCFullYear();
+    // getUTCMonth() is 0-indexed, so we add 1 for the date string.
+    // padStart ensures '01' instead of '1' for single-digit months.
+    const month = String(inputDate.getUTCMonth() + 1).padStart(2, '0'); 
+    const day = String(inputDate.getUTCDate()).padStart(2, '0');
+
+    // 3. Construct the UTC date strings for the range
+    // The date format is YYYY-MM-DDT00:00:00.000Z
+    const dateToFind = `${year}-${month}-${day}`; // e.g., "2025-11-13"
+
+    // Start of the required day (e.g., Nov 13) in UTC
+    const departureDateStart = new Date(dateToFind + 'T00:00:00.000Z');
+
+    // Start of the next day (e.g., Nov 14) in UTC (exclusive upper bound)
+    const nextDayTimestamp = departureDateStart.getTime() + (24 * 60 * 60 * 1000); 
+    const departureDateEnd = new Date(nextDayTimestamp);
+
+      const busObjectId = mongoose.Types.ObjectId.isValid(busId) 
+        ? new mongoose.Types.ObjectId(busId) 
+        : busId;
+
+      const query = {
+        busId: busObjectId,
+        DepartureDate: {
+          $gte: departureDateStart,
+          $lte: departureDateEnd
+        },
+        isCancelled: false
+        // Removed isValid and status filters to include all non-cancelled bookings
+        // isValid might not be set correctly for all bookings
+        // Status can be ACTIVE, USED, etc. - all count toward capacity
+      };
+
+
+      const bookedPassengers = await PassengerModel.countDocuments(query);
+
+      const capacityPercentage = ((bookedPassengers + (passengersCount || 0))/ totalSeats) * 100;
+
+      console.log(`📊 Bus capacity check for bus ${busId} on ${departureDate.toISOString()}: ${bookedPassengers}/${totalSeats} (${capacityPercentage.toFixed(1)}%)`);
+
+      // Only send notification if capacity >= 90%
+      if (capacityPercentage >= 90) {
+        // Get route information for notification
+        const route = await RouteModel.findById(routeId)
+          .populate('origin destination')
+          .lean();
+
+        if (!route) {
+          console.error('Route not found:', routeId);
+          return;
+        }
+
+        const origin = (route as any)?.origin?.name || 'Origin';
+        const destination = (route as any)?.destination?.name || 'Destination';
+
+        // Check if we've already sent an alert for this bus and departure date
+        // Use a unique identifier: busId + departureDate (date only, no time)
+        const Notification = (await import('../models/notification.model')).default;
+        const departureDateStr = departureDateStart.toISOString().split('T')[0];
+        const existingAlert = await Notification.findOne({
+          category: 'admin_bus_capacity',
+          'metadata.busId': busId,
+          'metadata.departureDate': departureDateStr
+        });
+
+        // if (!existingAlert) {
+        if (true) {
+          console.log(`🚨 Sending capacity alert for bus ${busId} on ${departureDateStr} - ${capacityPercentage.toFixed(1)}% full`);
+
+          // Generate a unique tripId for this bus+date combination
+          // Since we don't have a trip model, we'll use busId + departureDate
+          const tripId = `${busId}-${departureDateStr}`;
+
+          // Create a custom alert with busId in metadata
+          const Notification = (await import('../models/notification.model')).default;
+          const NotificationCategory = (await import('../models/common/types')).NotificationCategory;
+          const UserRole = (await import('../models/common/types')).UserRole;
+          
+          // Send to SUPER_ADMIN
+          await notificationService.sendToRole(UserRole.SUPER_ADMIN, {
+            category: NotificationCategory.ADMIN_BUS_CAPACITY,
+            title: '🚌 High Bus Capacity Alert',
+            body: `Route ${origin} to ${destination} is ${capacityPercentage.toFixed(1)}% full (${bookedPassengers}/${totalSeats} seats)`,
+            metadata: {
+              screen: 'TripManagement',
+              params: { tripId: tripId },
+              tripId: tripId,
+              routeId: routeId,
+              origin: origin,
+              destination: destination,
+              departureTime: departureDate,
+              busCapacity: totalSeats,
+              currentBookings: bookedPassengers,
+              busId: busId,
+              departureDate: departureDateStr
+            },
+            priority: 'high',
+            sendPush: true
+          }).catch(err => {
+            console.error('Error sending capacity alert to SUPER_ADMIN:', err);
+          });
+
+          // Send to MANAGER
+          await notificationService.sendToRole(UserRole.MANAGER, {
+            category: NotificationCategory.ADMIN_BUS_CAPACITY,
+            title: '🚌 High Bus Capacity Alert',
+            body: `Route ${origin} to ${destination} is ${capacityPercentage.toFixed(1)}% full. Consider adding another bus.`,
+            metadata: {
+              screen: 'TripManagement',
+              params: { tripId: tripId },
+              tripId: tripId,
+              routeId: routeId,
+              origin: origin,
+              destination: destination,
+              departureTime: departureDate,
+              busCapacity: totalSeats,
+              currentBookings: bookedPassengers,
+              busId: busId,
+              departureDate: departureDateStr
+            },
+            priority: 'high',
+            sendPush: true
+          }).catch(err => {
+            console.error('Error sending capacity alert to MANAGER:', err);
+          });
+        } else {
+          console.log(`ℹ️  Capacity alert already sent for bus ${busId} on ${departureDateStr}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking bus capacity for booking:', error);
+      // Don't throw - this is a background check and shouldn't fail the booking
     }
   }
 

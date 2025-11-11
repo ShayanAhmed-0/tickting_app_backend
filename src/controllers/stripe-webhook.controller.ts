@@ -11,6 +11,7 @@ import { QRCodeUtils } from "../utils/QRCode";
 import { SeatStatus, PaymentGateway, TransactionStatus } from "../models/common/types";
 import { io } from "../server";
 import notificationService from "../services/notification.service";
+import tripReminderService from "../services/trip-reminder.service";
 
 const stripe = new Stripe(STRIPE_SECRET_KEY as string);
 
@@ -301,6 +302,35 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
           userId: userId,
           busId: returnBusId
         });
+      }
+    }
+
+    // Check bus capacity and send notification to admins if >= 90%
+    // IMPORTANT: This runs AFTER passengers are created and seats are booked
+    // Check for outbound trip
+    try {
+      console.log('🔍 Checking bus capacity after webhook booking completion...');
+      await tripReminderService.checkBusCapacityForBooking(
+        getBus._id?.toString() || busId,
+        routeId,
+        new Date(departureDate)
+      );
+    } catch (capacityError) {
+      console.error('Error checking bus capacity for outbound trip:', capacityError);
+      // Don't fail the booking if capacity check fails
+    }
+
+    // Check for return trip if round trip
+    if(tripType === "round_trip" && returnBus && returnRoute) {
+      try {
+        await tripReminderService.checkBusCapacityForBooking(
+          returnBus._id?.toString() || returnBusId,
+          returnRouteId || '',
+          new Date(roundTripDate)
+        );
+      } catch (capacityError) {
+        console.error('Error checking bus capacity for return trip:', capacityError);
+        // Don't fail the booking if capacity check fails
       }
     }
 

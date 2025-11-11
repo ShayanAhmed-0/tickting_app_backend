@@ -167,6 +167,7 @@ class NotificationService {
 
             const results = await Promise.allSettled(pushPromises);
             const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
+            console.log('🔍 Success count:', successCount);
 
             if (successCount > 0) {
               notification.type = NotificationType.PUSH;
@@ -440,7 +441,10 @@ class NotificationService {
         destination: tripData.destination,
         departureTime: tripData.departureTime,
         busCapacity: tripData.totalSeats,
-        currentBookings: tripData.bookedSeats
+        currentBookings: tripData.bookedSeats,
+        // Add busId and departureDate for duplicate checking
+        busId: tripData.tripId.split('-')[0], // Extract busId from tripId if format is busId-date
+        departureDate: tripData.departureTime ? new Date(tripData.departureTime).toISOString().split('T')[0] : undefined
       },
       priority: 'high',
       sendPush: true
@@ -460,7 +464,10 @@ class NotificationService {
         destination: tripData.destination,
         departureTime: tripData.departureTime,
         busCapacity: tripData.totalSeats,
-        currentBookings: tripData.bookedSeats
+        currentBookings: tripData.bookedSeats,
+        // Add busId and departureDate for duplicate checking
+        busId: tripData.tripId.split('-')[0], // Extract busId from tripId if format is busId-date
+        departureDate: tripData.departureTime ? new Date(tripData.departureTime).toISOString().split('T')[0] : undefined
       },
       priority: 'high',
       sendPush: true

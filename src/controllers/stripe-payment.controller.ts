@@ -15,6 +15,7 @@ import { io } from "../server";
 import { redis, RedisKeys } from "../config/redis";
 import { departureDateSeatService } from "../services/departure-date-seat.service";
 import notificationService from "../services/notification.service";
+import tripReminderService from "../services/trip-reminder.service";
 
 const stripe = new Stripe(STRIPE_SECRET_KEY as string);
 
@@ -340,6 +341,20 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
         busId: busId,
         departureDate: departureDate
       });
+    }
+
+    // Check bus capacity and send notification to admins if >= 90%
+    // IMPORTANT: This runs AFTER passengers are created and seats are booked
+    try {
+      console.log('🔍 Checking bus capacity after payment confirmation...');
+      await tripReminderService.checkBusCapacityForBooking(
+        getBus._id?.toString() || busId,
+        routeId,
+        new Date(departureDate || new Date())
+      );
+    } catch (capacityError) {
+      console.error('Error checking bus capacity:', capacityError);
+      // Don't fail the booking if capacity check fails
     }
 
     // Generate individual QR codes for each passenger/seat

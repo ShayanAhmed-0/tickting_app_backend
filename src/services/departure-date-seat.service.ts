@@ -184,7 +184,7 @@ export class DepartureDateSeatService {
     seatLabel: string,
     departureDate: Date,
     userId: string,
-    bookingId: string
+    bookingId?: string
   ): Promise<{ success: boolean; reason?: string }> {
     try {
       // First, check if seat is held by this user or available

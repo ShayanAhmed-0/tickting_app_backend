@@ -19,11 +19,14 @@ import helper from "../helper";
 import { TicketPDFGenerator, TicketPDFData } from "../utils/PDF/ticketPDFGenerator";
 import { calculatePassengerFare, calculateFare } from "../utils/pricing";
 import { departureDateSeatService } from "../services/departure-date-seat.service";
+import tripReminderService from "../services/trip-reminder.service";
 
 export const bookSeats = async (req: CustomRequest, res: Response) => {
   try {
     let { routeId,busId, paymentType,passengers, tripType,bookedBy=UserRole.CUSTOMER,additionalBaggage,roundTripDate,departureDate } = req.body;
 
+
+    
     const userId = req.authId;
     if(!userId) {
       return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "User not found");
@@ -210,6 +213,36 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
     const baseFare = await calculateFare(routeId, tripType);
     let getTotalPrice = (baseFare * passengers.length) + parseFloat(additionalBaggage || 0);
     
+
+    try {
+      console.log('🔍 Checking bus capacity after booking completion...');
+      await tripReminderService.checkBusCapacityForBooking(
+        getBus._id?.toString() || busId,
+        routeId as string,
+        new Date(departureDate),
+        passengers.length
+      );
+    } catch (capacityError) {
+      console.error('Error checking bus capacity for outbound trip:', capacityError);
+      // Don't fail the booking if capacity check fails
+    }
+
+    // Check for return trip if round trip
+    if(tripType === TripType.ROUND_TRIP && returnBus && returnRoute) {
+      try {
+        await tripReminderService.checkBusCapacityForBooking(
+          returnBus._id?.toString() || (returnRoute as any).bus,
+          returnRoute._id?.toString() || '',
+          new Date(roundTripDate),
+          passengers.length
+        );
+      } catch (capacityError) {
+        console.error('Error checking bus capacity for return trip:', capacityError);
+        // Don't fail the booking if capacity check fails
+      }
+    }
+
+
     if(paymentType === "stripe") {
     // Add passengers data in redis with unique key and send that key in payment intent
     const { v4: uuidv4 } = require('uuid');
@@ -441,6 +474,10 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
       }
     }
 
+    // Check bus capacity and send notification to admins if >= 90%
+    // IMPORTANT: This must run AFTER passengers are created and seats are booked
+    // Check for outbound trip
+  
 
     // Generate individual QR codes for each passenger/seat
     const passengersWithQR = [];
