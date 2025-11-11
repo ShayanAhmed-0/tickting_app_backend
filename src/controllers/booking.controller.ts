@@ -633,7 +633,350 @@ export const getLatestBooking = async (req: CustomRequest, res: Response) => {
           { latestBooking: getAllFamilyLatestBooking },
           "Latest family booking fetched successfully"
         );
+        return ResponseUtil.successResponse(
+          res,
+          STATUS_CODES.SUCCESS,
+          { latestBooking: getAllFamilyLatestBooking },
+          "Latest family booking fetched successfully"
+        );
       }
+    }
+
+    // Check if it's a round trip (single passenger)
+    if(latestBooking?.type === TripType.ROUND_TRIP) {
+      const groupTicketSerial = latestBooking.groupTicketSerial;
+      if(groupTicketSerial) {
+        const allRoundTripTickets = await PassengerModel.find({
+          groupTicketSerial: groupTicketSerial,
+          user: userId
+        }).sort({ ticketNumber: 1 });
+        
+        const outboundTickets = allRoundTripTickets.filter(ticket => !ticket.ticketNumber.includes('-RT'));
+        const returnTickets = allRoundTripTickets.filter(ticket => ticket.ticketNumber.includes('-RT'));
+        
+        return ResponseUtil.successResponse(
+          res,
+          STATUS_CODES.SUCCESS,
+          { 
+            latestBooking: allRoundTripTickets,
+            tripType: 'round_trip',
+            outboundTickets,
+            returnTickets,
+            groupTicketSerial
+          },
+          "Latest round trip booking fetched successfully"
+        );
+      }
+    }
+
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { latestBooking: [latestBooking] },
+      "Latest booking fetched successfully"
+    );
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+export const printTicket = async (req: CustomRequest, res: Response) => {
+  try {
+    const userId = req.authId;
+    const ticketNumber = req.params.ticketNumber;
+    
+    if(!ticketNumber) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Ticket ID not found");
+    }
+
+    // Find the ticket
+    const ticket = await PassengerModel.findOne({ ticketNumber: ticketNumber })
+      .populate('user')
+      .populate('busId');
+    
+    if(!ticket) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Ticket not found");
+    }
+
+    // Verify user has access to this ticket
+    // if(ticket.user.toString() !== userId) {
+    //   return ResponseUtil.errorResponse(res, STATUS_CODES.FORBIDDEN, "Access denied to this ticket");
+    // }
+
+    let ticketsToPrint = [ticket];
+
+    // If it's a family booking, get all related tickets
+    if(ticket.for === ForWho.FAMILY && ticket.groupTicketSerial) {
+      const familyTickets = await PassengerModel.find({
+        groupTicketSerial: ticket.groupTicketSerial
+      }).populate('user').populate('busId');
+      
+      ticketsToPrint = familyTickets;
+    }
+    
+    // If it's a round trip booking (single or family), get both outbound and return tickets
+    if(ticket.type === TripType.ROUND_TRIP && ticket.groupTicketSerial) {
+      const roundTripTickets = await PassengerModel.find({
+        groupTicketSerial: ticket.groupTicketSerial,
+        user: ticket.user
+      }).populate('user').populate('busId');
+      
+      ticketsToPrint = roundTripTickets;
+    }
+
+    // Get route information - we need to find the route by busId
+    const route = await RouteModel.findOne({ bus: ticket.busId })
+      .populate('origin')
+      .populate('destination');
+
+    if(!route) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Route information not found");
+    }
+
+    // Generate PDF tickets
+    const pdfGenerator = new TicketPDFGenerator();
+    
+    const ticketsData: TicketPDFData[] = ticketsToPrint.map(ticketData => ({
+      passenger: ticketData,
+      routeInfo: {
+        from: (route as any).origin?.name || ticketData.From,
+        to: (route as any).destination?.name || ticketData.To,
+        departureDate: ticketData.DepartureDate,
+        returnDate: ticketData.ReturnDate || undefined
+      },
+      busInfo: {
+        busNumber: (ticketData.busId as any)?.busNumber || 'N/A',
+        driverName: (ticketData.busId as any)?.driverName || undefined
+      },
+      companyInfo: {
+        name: "Los Mismos Travels",
+        // address: "123 Main Street, City, State 12345",
+        // phone: "+1 (555) 123-4567",
+        // email: "info@yourbuscompany.com"
+      }
+    }));
+
+    let pdfBuffer: Buffer;
+    
+    if(ticketsData.length === 1) {
+      // Single ticket
+      pdfBuffer = await pdfGenerator.generateTicket(ticketsData[0]);
+    } else {
+      // Multiple tickets (family booking)
+      pdfBuffer = await pdfGenerator.generateMultipleTickets(ticketsData);
+    }
+
+    // Set response headers for PDF download
+    const filename = ticketsData.length === 1 
+      ? `ticket-${ticketNumber}.pdf` 
+      : `tickets-${ticket.groupTicketSerial}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send the PDF
+    res.send(pdfBuffer);
+
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const searchTickets = async (req: CustomRequest, res: Response) => {
+  try {
+    const userId = req.authId;
+    const ticketNumber = req.params.ticketNumber;
+
+    if(!ticketNumber) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Ticket ID not found");
+    }
+    const ticket = await PassengerModel.findOne({ ticketNumber: ticketNumber });
+    if(!ticket) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Ticket not found");
+    }
+
+    // Check if it's a family booking
+    if(ticket.for === ForWho.FAMILY) {
+      const familyTickets = await PassengerModel.find({ groupTicketSerial: ticket.groupTicketSerial });
+      
+      // Check if any of the family tickets are round trip
+      const hasRoundTrip = familyTickets.some(t => t.type === TripType.ROUND_TRIP);
+      
+      if(hasRoundTrip) {
+        // For round trip family bookings, separate outbound and return tickets
+        const outboundTickets = familyTickets.filter(t => !t.ticketNumber.includes('-RT'));
+        const returnTickets = familyTickets.filter(t => t.ticketNumber.includes('-RT'));
+        
+        return ResponseUtil.successResponse(
+          res,
+          STATUS_CODES.SUCCESS,
+          { 
+            familyTickets,
+            tripType: 'round_trip_family',
+            outboundTickets,
+            returnTickets,
+            groupTicketSerial: ticket.groupTicketSerial
+          },
+          "Round trip family tickets fetched successfully"
+        );
+      } else {
+        return ResponseUtil.successResponse(
+          res,
+          STATUS_CODES.SUCCESS,
+          { familyTickets },
+          "Family tickets fetched successfully"
+        );
+      }
+    }
+
+    // Check if it's a round trip (single passenger)
+    if(ticket.type === TripType.ROUND_TRIP && ticket.groupTicketSerial) {
+      const roundTripTickets = await PassengerModel.find({
+        groupTicketSerial: ticket.groupTicketSerial,
+        user: ticket.user
+      });
+      
+      const outboundTickets = roundTripTickets.filter(t => !t.ticketNumber.includes('-RT'));
+      const returnTickets = roundTripTickets.filter(t => t.ticketNumber.includes('-RT'));
+      
+      return ResponseUtil.successResponse(
+        res,
+        STATUS_CODES.SUCCESS,
+        { 
+          ticket: roundTripTickets,
+          tripType: 'round_trip',
+          outboundTickets,
+          returnTickets,
+          groupTicketSerial: ticket.groupTicketSerial
+        },
+        "Round trip tickets fetched successfully"
+      );
+    }
+
+    return ResponseUtil.successResponse(
+        res,
+        STATUS_CODES.SUCCESS,
+        { ticket },
+        "Ticket fetched successfully"
+      );
+  }
+  catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
+export const cancelBooking = async (req: CustomRequest, res: Response) => {
+  try {
+    const userId = req.authId;
+    const { ticketNumber, reason } = req.body;
+
+    if(!userId) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "User not found");
+    }
+
+    if(!ticketNumber) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Ticket number is required");
+    }
+
+    // Find the ticket
+    const ticket = await PassengerModel.findOne({ 
+      ticketNumber: ticketNumber,
+      user: userId 
+    });
+
+    if(!ticket) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.NOT_FOUND, "Ticket not found or you don't have permission to cancel this ticket");
+    }
+
+    // Check if ticket is already cancelled
+    if(ticket.isCancelled) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Ticket is already cancelled");
+    }
+
+    // Check if ticket is already used/checked in
+    if(ticket.alreadyScanned) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Cannot cancel a ticket that has already been used");
+    }
+
+    // Check if departure date has passed (allow cancellation up to 1 hour before departure)
+    const departureDate = new Date(ticket.DepartureDate);
+    const oneHourBeforeDeparture = new Date(departureDate.getTime() - (60 * 60 * 1000));
+    const now = new Date();
+
+    if(now > oneHourBeforeDeparture) {
+      return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, "Cannot cancel ticket less than 1 hour before departure");
+    }
+
+    // Get all related tickets (for family or round trip bookings)
+    let ticketsToCancel = [ticket];
+    
+    if(ticket.for === ForWho.FAMILY && ticket.groupTicketSerial) {
+      const familyTickets = await PassengerModel.find({ 
+        groupTicketSerial: ticket.groupTicketSerial,
+        user: userId 
+      });
+      ticketsToCancel = familyTickets;
+    } else if(ticket.type === TripType.ROUND_TRIP && ticket.groupTicketSerial) {
+      const roundTripTickets = await PassengerModel.find({
+        groupTicketSerial: ticket.groupTicketSerial,
+        user: userId
+      });
+      ticketsToCancel = roundTripTickets;
+    }
+
+    // Cancel all related tickets
+    const cancelledTickets = [];
+    let totalRefundAmount = 0;
+    
+    for (const ticketToCancel of ticketsToCancel) {
+      // Update ticket status
+      ticketToCancel.isCancelled = true;
+      ticketToCancel.status = TicketStatus.REVOKED;
+      await ticketToCancel.save();
+
+      // Calculate individual ticket price using the DFW hub pricing system
+      const ticketPrice = await calculatePassengerFare(ticketToCancel);
+      totalRefundAmount += ticketPrice;
+
+      // Update bus seat status back to available
+      await BusModel.updateOne(
+        { 
+          _id: ticketToCancel.busId,
+          "seatLayout.seats.seatLabel": ticketToCancel.seatLabel 
+        },
+        { 
+          $set: { 
+            "seatLayout.seats.$.status": SeatStatus.AVAILABLE,
+            "seatLayout.seats.$.isAvailable": true,
+            "seatLayout.seats.$.userId": null
+          },
+          $inc: { totalBookedSeats: -1 }
+        }
+      );
+
+      // Emit seat status change to all users in the route room
+      const route = await RouteModel.findOne({ bus: ticketToCancel.busId });
+      if(route) {
+        io.to(`route:${route._id}`).emit('seat:status:changed', {
+          routeId: route._id,
+          seatLabel: ticketToCancel.seatLabel,
+          status: SeatStatus.AVAILABLE,
+          userId: null,
+          busId: ticketToCancel.busId
+        });
+      }
+
+      cancelledTickets.push({
+        ticketNumber: ticketToCancel.ticketNumber,
+        seatLabel: ticketToCancel.seatLabel,
+        fullName: ticketToCancel.fullName,
+        isReturnTrip: ticketToCancel.ticketNumber.includes('-RT')
     }
 
     // Check if it's a round trip (single passenger)
@@ -973,6 +1316,34 @@ export const cancelBooking = async (req: CustomRequest, res: Response) => {
         isReturnTrip: ticketToCancel.ticketNumber.includes('-RT')
       });
     }
+    
+    // Update user's refund amount
+    if (totalRefundAmount > 0) {
+      await Profile.updateOne(
+        { auth: userId },
+        { $inc: { refundAmount: totalRefundAmount } }
+      );
+    }
+
+    return ResponseUtil.successResponse(
+      res,
+      STATUS_CODES.SUCCESS,
+      { 
+        cancelledTickets,
+        totalCancelled: cancelledTickets.length,
+        groupTicketSerial: ticket.groupTicketSerial,
+        reason: reason || "No reason provided"
+      },
+      `Successfully cancelled ${cancelledTickets.length} ticket(s)`
+    );
+
+  } catch (err) {
+    if (err instanceof CustomError)
+      return ResponseUtil.errorResponse(res, err.statusCode, err.message);
+    ResponseUtil.handleError(res, err);
+  }
+};
+
     
     // Update user's refund amount
     if (totalRefundAmount > 0) {
