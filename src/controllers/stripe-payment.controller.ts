@@ -452,7 +452,7 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       console.error('❌ Error sending notifications:', notifError);
       // Don't fail the booking if notification fails
     }
-
+// 
     // Return the same response format as cash payment
     return ResponseUtil.successResponse(
       res,
