@@ -14,8 +14,12 @@ router.get("/sales-report", checkAdminAuth, validateQuery(salesReportSchema), ge
 
 // router.get("/drivers-report", validateQuery(driversReportSchema), getDriversReport);
 router.get("/drivers-report", checkAdminAuth, validateQuery(driversReportSchema), getDriversReport);
-router.get("/route-seat-report-download", checkAdminAuth,validateQuery(routeSeatReportSchema), getRouteSeatReportDownload);
-router.get("/sales-report-download", checkAdminAuth,validateQuery(salesReportSchema) , getSalesReportDownload);
-router.get("/drivers-report-download", checkAdminAuth,validateQuery(driversReportSchema), getDriversReportDownload);
+// router.get("/route-seat-report-download", checkAdminAuth,validateQuery(routeSeatReportSchema), getRouteSeatReportDownload);
+// router.get("/sales-report-download", checkAdminAuth,validateQuery(salesReportSchema) , getSalesReportDownload);
+// router.get("/drivers-report-download", checkAdminAuth,validateQuery(driversReportSchema), getDriversReportDownload);
+//tests
+router.get("/route-seat-report-download",validateQuery(routeSeatReportSchema), getRouteSeatReportDownload);
+router.get("/sales-report-download", validateQuery(salesReportSchema) , getSalesReportDownload);
+router.get("/drivers-report-download",validateQuery(driversReportSchema), getDriversReportDownload);
 
 export default router;

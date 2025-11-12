@@ -272,15 +272,24 @@ export const getRouteSeatReportDownload = async (req: Request, res: Response) =>
       .populate('destination', 'name description')
       .populate({
         path: 'bus',
-        select: 'serialNumber code driver seatLayout capacity totalBookedSeats',
-        populate: {
+        select: 'serialNumber code driver seatLayout capacity totalBookedSeats mxdriverId',
+        populate: [{
           path: 'driver',
           select: 'profile',
           populate: {
             path: 'profile',
             select: 'firstName secondName lastName contactNumber'
           }
+        },
+        {
+          path: 'mxdriverId',
+          select: 'profile',
+          populate: {
+            path: 'profile',
+            select: 'firstName secondName lastName contactNumber'
+          }
         }
+      ]
       });
 
     if (!route) {
@@ -401,148 +410,8 @@ export const getRouteSeatReportDownload = async (req: Request, res: Response) =>
     });
 
     // Get driver information from DriverReport for this route and date
-    let mxDriverName = '';
-    let usDriverName = '';
-    
-    try {
-      console.log('Searching for driver report...');
-      console.log('Route ID:', routeId);
-      console.log('Bus ID:', busDetails._id);
-      console.log('Date range:', startOfDay, 'to', endOfDay);
-      
-      // First try: Search by route ID and bus ID with date
-      let driverReport = await DriverReport.findOne({
-        route: routeId,
-        bus: busDetails._id,
-        tripDate: {
-          $gte: startOfDay,
-          $lte: endOfDay
-        }
-      })
-      .populate({
-        path: 'mxDriver',
-        select: 'profile',
-        populate: {
-          path: 'profile',
-          select: 'firstName secondName lastName'
-        }
-      })
-      .populate({
-        path: 'usDriver',
-        select: 'profile',
-        populate: {
-          path: 'profile',
-          select: 'firstName secondName lastName'
-        }
-      })
-      .sort({ createdAt: -1 })
-      .limit(1);
-
-      console.log('Driver Report Found (by route+bus):', driverReport ? 'Yes' : 'No');
-      
-      // Second try: If not found, search by bus and date only
-      if (!driverReport) {
-        console.log('Searching by bus ID only...');
-        driverReport = await DriverReport.findOne({
-          bus: busDetails._id,
-          tripDate: {
-            $gte: startOfDay,
-            $lte: endOfDay
-          }
-        })
-        .populate({
-          path: 'mxDriver',
-          select: 'profile',
-          populate: {
-            path: 'profile',
-            select: 'firstName secondName lastName'
-          }
-        })
-        .populate({
-          path: 'usDriver',
-          select: 'profile',
-          populate: {
-            path: 'profile',
-            select: 'firstName secondName lastName'
-          }
-        })
-        .sort({ createdAt: -1 })
-        .limit(1);
-        
-        console.log('Driver Report Found (by bus only):', driverReport ? 'Yes' : 'No');
-      }
-      
-      // Third try: Search by date only as last resort
-      if (!driverReport) {
-        console.log('Searching by date only...');
-        driverReport = await DriverReport.findOne({
-          tripDate: {
-            $gte: startOfDay,
-            $lte: endOfDay
-          }
-        })
-        .populate({
-          path: 'mxDriver',
-          select: 'profile',
-          populate: {
-            path: 'profile',
-            select: 'firstName secondName lastName'
-          }
-        })
-        .populate({
-          path: 'usDriver',
-          select: 'profile',
-          populate: {
-            path: 'profile',
-            select: 'firstName secondName lastName'
-          }
-        })
-        .sort({ createdAt: -1 })
-        .limit(1);
-        
-        console.log('Driver Report Found (by date only):', driverReport ? 'Yes' : 'No');
-      }
-      
-      if (driverReport) {
-        const mxDriver = (driverReport as any).mxDriver;
-        const usDriver = (driverReport as any).usDriver;
-        
-        console.log('MX Driver exists:', !!mxDriver);
-        console.log('US Driver exists:', !!usDriver);
-        
-        if (mxDriver) {
-          console.log('MX Driver profile:', mxDriver.profile);
-          mxDriverName = mxDriver.profile 
-            ? `${mxDriver.profile.firstName || ''} ${mxDriver.profile.secondName || ''} ${mxDriver.profile.lastName || ''}`.trim()
-            : '';
-        }
-        
-        if (usDriver) {
-          console.log('US Driver profile:', usDriver.profile);
-          usDriverName = usDriver.profile 
-            ? `${usDriver.profile.firstName || ''} ${usDriver.profile.secondName || ''} ${usDriver.profile.lastName || ''}`.trim()
-            : '';
-        }
-      } else {
-        console.log('No driver report found at all. Using bus driver as fallback...');
-        // If no driver report exists, try to use bus driver as fallback
-        const busDriver = busDetails.driver as any;
-        if (busDriver?.profile) {
-          console.log('Bus driver profile:', busDriver.profile);
-          mxDriverName = `${busDriver.profile.firstName || ''} ${busDriver.profile.secondName || ''} ${busDriver.profile.lastName || ''}`.trim();
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching driver report:', error);
-    }
-    
-    console.log('Final MX Driver Name:', mxDriverName);
-    console.log('Final US Driver Name:', usDriverName);
-
-    // Debug: Log seat report to verify data
-    console.log('Seat Report Sample (first 3):', JSON.stringify(seatReport.slice(0, 3), null, 2));
-    console.log('Total seats:', seatReport.length);
-    console.log('Occupied seats:', seatReport.filter((s: any) => !s.isFree).length);
+    let mxDriverName = busDetails.mxdriverId?.profile?.firstName + ' ' + busDetails.mxdriverId?.profile?.secondName + ' ' + busDetails.mxdriverId?.profile?.lastName;
+    let usDriverName = busDetails.driver?.profile?.firstName + ' ' + busDetails.driver?.profile?.secondName + ' ' + busDetails.driver?.profile?.lastName;
 
     // Generate PDF
     return await generateRouteSeatReportPDF(
@@ -599,52 +468,77 @@ const generateRouteSeatReportPDF = async (
   try {
     const logoPath = path.join(process.cwd(), 'public', 'uploads', 'logo.png');
     if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 50, 30, { width: 120, height: 60, fit: [120, 60] });
+      // Center the logo horizontally at the top
+      const pageWidth = doc.page.width;
+      const logoWidth = 120;
+      const logoHeight = 60;
+      const centerX = (pageWidth - logoWidth) / 2;
+      doc.image(logoPath, centerX, 30, { width: logoWidth, height: logoHeight, fit: [logoWidth, logoHeight] });
     }
   } catch (error) {
     console.error('Error adding logo to PDF:', error);
   }
 
-  // Add header info
-  doc.fontSize(14).font('Helvetica-Bold')
+  // Add header info - Left Column
+  const leftX = 50;
+  const rightX = 300;
+  let headerY = 100;
+
+  // BUS (Left Column)
+  doc.fontSize(11).font('Helvetica-Bold')
     .fillColor('black')
-    .text('BUS:', 220, 45)
-    .text(routeInfo.busCode, 260, 45);
-
+    .text('BUS:', leftX, headerY);
+  
+  const busText = `${routeInfo.busCode} ${routeInfo.origin} - ${routeInfo.destination}`;
   doc.fontSize(11).font('Helvetica')
-    .text(`${routeInfo.origin} - ${routeInfo.destination}`, 220, 65);
+    .text(busText, leftX + 30, headerY);
+  
+  // Draw line under BUS
+  doc.moveTo(leftX, headerY + 15).lineTo(leftX + 250, headerY + 15).stroke();
 
-  // Date and time on right side
+  // DATE (Right Column)
   const formattedDate = `${(routeInfo.date.getMonth() + 1).toString().padStart(2, '0')}/${routeInfo.date.getDate().toString().padStart(2, '0')}/${routeInfo.date.getFullYear()}`;
   doc.fontSize(11).font('Helvetica-Bold')
-    .text('DATE:', 400, 45, { align: 'left' })
-    .text(`${formattedDate} ${routeInfo.time}`, 445, 45);
-
-  // Driver info
-  doc.fontSize(10).font('Helvetica-Bold')
-    .fillColor('black')
-    .text('MX DRIVER:', 50, 110)
+    .text('DATE:', rightX+40, headerY)
     .font('Helvetica')
-    .text(routeInfo.mxDriver || 'N/A', 130, 110);
+    .text(`${formattedDate} ${routeInfo.time}`, rightX + 80, headerY);
+  
+  // Draw line under DATE
+  doc.moveTo(rightX, headerY + 15).lineTo(rightX + 200, headerY + 15).stroke();
 
+  // MX DRIVER (Left Column)
+  headerY += 40;
+  doc.fontSize(11).font('Helvetica-Bold')
+    .text('MX DRIVER:', leftX, headerY)
+    .font('Helvetica')
+    .text(routeInfo.mxDriver || 'N/A', leftX + 80, headerY);
+  
+  // Draw line under MX DRIVER
+  doc.moveTo(leftX, headerY + 15).lineTo(leftX + 200, headerY + 15).stroke();
+
+  // US DRIVER (Right Column)
   doc.font('Helvetica-Bold')
-    .text('US DRIVER:', 300, 110)
+    .text('US DRIVER:', rightX, headerY)
     .font('Helvetica')
-    .text(routeInfo.usDriver || 'N/A', 380, 110);
+    .text(routeInfo.usDriver || 'N/A', rightX + 80, headerY);
+  
+  // Draw line under US DRIVER
+  doc.moveTo(rightX, headerY + 15).lineTo(rightX + 200, headerY + 15).stroke();
 
   // Draw line separator
-  doc.moveTo(50, 135).lineTo(545, 135).stroke();
+  doc.moveTo(50, headerY + 30).lineTo(545, headerY + 30).stroke();
 
   // Split seats into two columns
   const seatsPerColumn = Math.ceil(seatReport.length / 2);
   const leftColumnSeats = seatReport.slice(0, seatsPerColumn);
   const rightColumnSeats = seatReport.slice(seatsPerColumn);
 
-  let currentY = 150;
-  const leftX = 50;
-  const rightX = 300;
+  let currentY = headerY + 50;
   const lineHeight = 20;
   const fontSize = 9;
+  const columnWidth = 240;
+  const boxHeight = lineHeight;
+  const seatNumberWidth = 30;
 
   // Draw left column
   leftColumnSeats.forEach((seat: any, index: number) => {
@@ -658,27 +552,45 @@ const generateRouteSeatReportPDF = async (
     
     const actualY = y > 750 ? 50 + ((index - Math.floor((y - 150) / lineHeight)) * lineHeight) : y;
     
+    // Draw box around the row
+    doc.rect(leftX, actualY - 2, columnWidth, boxHeight)
+       .strokeColor('#CCCCCC')
+       .lineWidth(0.5)
+       .stroke();
+    
+    // Draw vertical line to separate seat number from passenger info
+    doc.moveTo(leftX + seatNumberWidth, actualY - 2)
+       .lineTo(leftX + seatNumberWidth, actualY + boxHeight - 2)
+       .strokeColor('#CCCCCC')
+       .lineWidth(0.5)
+       .stroke();
+    
     if (seat.isFree) {
       // Empty seat - just show number in black
       doc.fontSize(fontSize)
          .font('Helvetica')
          .fillColor('#000000')
-         .text(`${seat.seatNumber}`, leftX, actualY, { width: 240 });
+         .text(`${seat.seatNumber}`, leftX + 5, actualY, { width: seatNumberWidth - 5 });
     } else {
-      // Occupied seat with passenger info in blue bold
+      // Occupied seat - seat number in first column, passenger info in second
+      doc.fontSize(fontSize)
+         .font('Helvetica')
+         .fillColor('#000000')
+         .text(`${seat.seatNumber}`, leftX + 5, actualY, { width: seatNumberWidth - 5 });
+      
       const passengerText = seat.passengerInfo?.fullName 
-        ? `${seat.seatNumber} | ${seat.passengerInfo.fullName.toUpperCase()} (${seat.passengerInfo.from}, ${seat.passengerInfo.to})`
-        : `${seat.seatNumber}`;
+        ? `${seat.passengerInfo.fullName.toUpperCase()} (${seat.passengerInfo.from}, ${seat.passengerInfo.to})`
+        : '';
       
       doc.fontSize(fontSize)
-         .font('Helvetica-Bold')
+         .font('Helvetica')
          .fillColor('#0000FF')
-         .text(passengerText, leftX, actualY, { width: 240 });
+         .text(passengerText, leftX + seatNumberWidth + 5, actualY, { width: columnWidth - seatNumberWidth - 10 });
     }
   });
 
   // Draw right column
-  currentY = 150;
+  currentY = headerY + 50;
   rightColumnSeats.forEach((seat: any, index: number) => {
     const y = currentY + (index * lineHeight);
     
@@ -695,22 +607,40 @@ const generateRouteSeatReportPDF = async (
     
     const actualY = y > 750 ? 50 + ((index - Math.floor((y - 150) / lineHeight)) * lineHeight) : y;
     
+    // Draw box around the row
+    doc.rect(rightX, actualY - 2, columnWidth, boxHeight)
+       .strokeColor('#CCCCCC')
+       .lineWidth(0.5)
+       .stroke();
+    
+    // Draw vertical line to separate seat number from passenger info
+    doc.moveTo(rightX + seatNumberWidth, actualY - 2)
+       .lineTo(rightX + seatNumberWidth, actualY + boxHeight - 2)
+       .strokeColor('#CCCCCC')
+       .lineWidth(0.5)
+       .stroke();
+    
     if (seat.isFree) {
       // Empty seat - just show number in black
       doc.fontSize(fontSize)
          .font('Helvetica')
          .fillColor('#000000')
-         .text(`${seat.seatNumber}`, rightX, actualY, { width: 240 });
+         .text(`${seat.seatNumber}`, rightX + 5, actualY, { width: seatNumberWidth - 5 });
     } else {
-      // Occupied seat with passenger info in blue bold
+      // Occupied seat - seat number in first column, passenger info in second
+      doc.fontSize(fontSize)
+         .font('Helvetica')
+         .fillColor('#000000')
+         .text(`${seat.seatNumber}`, rightX + 5, actualY, { width: seatNumberWidth - 5 });
+      
       const passengerText = seat.passengerInfo?.fullName 
-        ? `${seat.seatNumber} | ${seat.passengerInfo.fullName.toUpperCase()} (${seat.passengerInfo.from}, ${seat.passengerInfo.to})`
-        : `${seat.seatNumber}`;
+        ? `${seat.passengerInfo.fullName.toUpperCase()} (${seat.passengerInfo.from}, ${seat.passengerInfo.to})`
+        : '';
       
       doc.fontSize(fontSize)
-         .font('Helvetica-Bold')
+         .font('Helvetica')
          .fillColor('#0000FF')
-         .text(passengerText, rightX, actualY, { width: 240 });
+         .text(passengerText, rightX + seatNumberWidth + 5, actualY, { width: columnWidth - seatNumberWidth - 10 });
     }
   });
 
@@ -723,7 +653,7 @@ const generateRouteSeatReportPDF = async (
       .text(
         `Page ${i + 1} of ${pages.count}`,
         50,
-        doc.page.height - 50,
+        doc.page.height-60,
         { align: 'center' }
       );
   }
@@ -1027,7 +957,8 @@ export const getSalesReportDownload = async (req: Request, res: Response) => {
     // Build query
     const query: any = {
       isCancelled: false,
-      isValid: true
+      isValid: true,
+      bookedBy: { $ne: 'customer' },
     };
 
     // Date filter based on type
@@ -1053,7 +984,11 @@ export const getSalesReportDownload = async (req: Request, res: Response) => {
         path: 'user',
         populate: {
           path: 'profile',
-          select: 'firstName lastName'
+          select: 'firstName lastName',
+          populate: {
+            path: 'office',
+            select: 'name'
+          }
         }
       })
       .populate('salesOffice', 'name location')
@@ -1064,7 +999,7 @@ export const getSalesReportDownload = async (req: Request, res: Response) => {
     const groupedData: any = {};
     
     for (const passenger of passengers) {
-      const office = (passenger.salesOffice as any)?.name || passenger.office || 'Unknown Office';
+      const office = (passenger.user as any)?.profile?.office?.name || 'Unknown Office';
       const paymentType = passenger.paymentIntentId ? 'CreditCard' : passenger.extraBaggageIntentId ? 'Free' : 'Cash';
       const bookedByUser = passenger.user as any;
       const agentName = bookedByUser?.profile?.firstName 
@@ -1148,7 +1083,7 @@ const generateExcelReport = async (
       });
       worksheet.addImage(imageId, {
         tl: { col: 0, row: 0 },
-        ext: { width: 150, height: 50 }
+        ext: { width: 180, height: 80 }
       });
     }
   } catch (error) {
@@ -1226,7 +1161,7 @@ const generateExcelReport = async (
             passenger.From || '',
             passenger.To || '',
             fechaSalida,
-            (passenger.busId as any)?.serialNumber || (passenger.busId as any)?.code || '',
+            (passenger.busId as any)?.code || '',
             `${passenger.ticketNumber} - ${passenger.fullName} (${passenger.type === 'round_trip' ? 'R' : 'S'})  (${passenger.seatLabel})`,
             fechaVenta,
             priceUS,
@@ -1356,10 +1291,10 @@ const generatePDFReport = async (
     fechaSalida: 350,
     autobus: 435,
     pasajero: 475,
-    fechaVenta: 600,
-    precioUS: 675,
-    precioMX: 725,
-    cantidad: 775
+    fechaVenta: 585,
+    precioUS: 660,
+    precioMX: 710,
+    cantidad: 760
   };
 
   // Draw table header
@@ -1375,11 +1310,11 @@ const generatePDFReport = async (
       hacia: 65,
       fechaSalida: 85,
       autobus: 40,
-      pasajero: 125,
+      pasajero: 110,
       fechaVenta: 75,
       precioUS: 50,
       precioMX: 50,
-      cantidad: 25
+      cantidad: 40
     };
     
     // Draw header background and cells with borders
@@ -1442,7 +1377,7 @@ const generatePDFReport = async (
           const fechaSalida = `${(depDate.getMonth() + 1).toString().padStart(2, '0')}/${depDate.getDate().toString().padStart(2, '0')}/${depDate.getFullYear()} ${depDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
           const fechaVenta = `${(saleDate.getMonth() + 1).toString().padStart(2, '0')}/${saleDate.getDate().toString().padStart(2, '0')}/${saleDate.getFullYear()} ${saleDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
 
-          const rowHeight = 16;
+          const rowHeight = 30;
           const colWidths = {
             vendidoEn: 55,
             formaPago: 60,
@@ -1451,11 +1386,11 @@ const generatePDFReport = async (
             hacia: 65,
             fechaSalida: 85,
             autobus: 40,
-            pasajero: 125,
+            pasajero: 110,
             fechaVenta: 75,
             precioUS: 50,
             precioMX: 50,
-            cantidad: 25
+            cantidad: 40
           };
           
           // Draw individual cell borders
@@ -1484,7 +1419,7 @@ const generatePDFReport = async (
           doc.text(passenger.From || '', colPositions.de + 2, currentY + 4, { width: colWidths.de - 4 })
              .text(passenger.To || '', colPositions.hacia + 2, currentY + 4, { width: colWidths.hacia - 4 })
              .text(fechaSalida, colPositions.fechaSalida + 2, currentY + 4, { width: colWidths.fechaSalida - 4 })
-             .text((passenger.busId as any)?.serialNumber || (passenger.busId as any)?.code || '', colPositions.autobus + 2, currentY + 4, { width: colWidths.autobus - 4 })
+             .text((passenger.busId as any)?.code || '', colPositions.autobus + 2, currentY + 4, { width: colWidths.autobus - 4 })
              .text(`${passenger.ticketNumber} - ${passenger.fullName} (${passenger.type === 'round_trip' ? 'R' : 'S'}) (${passenger.seatLabel})`, colPositions.pasajero + 2, currentY + 4, { width: colWidths.pasajero - 4 })
              .text(fechaVenta, colPositions.fechaVenta + 2, currentY + 4, { width: colWidths.fechaVenta - 4 })
              .text(`$${priceUS.toFixed(2)}`, colPositions.precioUS + 2, currentY + 4, { width: colWidths.precioUS - 4, align: 'right' })
@@ -1517,7 +1452,7 @@ const generatePDFReport = async (
           fechaVenta: 75,
           precioUS: 50,
           precioMX: 50,
-          cantidad: 25
+          cantidad: 40
         };
         
         // Draw subtotal row cells with background color
@@ -1538,7 +1473,7 @@ const generatePDFReport = async (
         doc.text('Total', colPositions.agente + 2, currentY + 4, { width: colWidths.agente - 4 })
            .text(`$${subtotalUS.toFixed(2)}`, colPositions.precioUS + 2, currentY + 4, { width: colWidths.precioUS - 4, align: 'right' })
            .text(`$${subtotalMX.toFixed(2)}`, colPositions.precioMX + 2, currentY + 4, { width: colWidths.precioMX - 4, align: 'right' })
-           .text(subtotalCount.toString(), colPositions.cantidad + 2, currentY + 4, { width: colWidths.cantidad - 4, align: 'center' });
+           .text(subtotalCount.toString(), colPositions.cantidad + 2, currentY + 4, { width: colWidths.cantidad, align: 'center' });
 
         currentY += subtotalRowHeight;
       }
@@ -1645,7 +1580,6 @@ const generateDriversExcelReport = async (
   // Add empty row for logo space
   const logoRow = worksheet.addRow([]);
   logoRow.height = 50;
-
   // Add logo image
   try {
     const logoPath = path.join(process.cwd(), 'public', 'uploads', 'logo.png');
@@ -1656,7 +1590,7 @@ const generateDriversExcelReport = async (
       });
       worksheet.addImage(imageId, {
         tl: { col: 0, row: 0 },
-        ext: { width: 150, height: 50 }
+        ext: { width: 180, height: 80 }
       });
     }
   } catch (error) {
@@ -1776,7 +1710,13 @@ const generateDriversPDFReport = async (
   try {
     const logoPath = path.join(process.cwd(), 'public', 'uploads', 'logo.png');
     if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 30, 20, { width: 150, height: 50 });
+      // Center the logo on the page
+      const logoWidth = 150;
+      const logoHeight = 50;
+      // Landscape A4: width = 841.89, so (841.89 - logoWidth) / 2 ≈ 345.95
+      const pageWidth = doc.page.width;
+      const xPos = (pageWidth - logoWidth) / 2;
+      doc.image(logoPath, xPos, 20, { width: logoWidth, height: logoHeight });
     }
   } catch (error) {
     console.error('Error adding logo to PDF:', error);
@@ -1812,7 +1752,7 @@ const generateDriversPDFReport = async (
     tripTime: 70,
     mxDriver: 140,
     usDriver: 140,
-    passengers: 50
+    passengers: 60
   };
 
   // Draw table header
