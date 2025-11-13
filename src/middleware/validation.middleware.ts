@@ -60,3 +60,33 @@ export const validateQuery = (schema: ZodSchema) => {
     }
   };
 };
+
+// Generic validate function for schemas with nested structure
+export const validate = (schema: any) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      schema.parse(req);
+      next();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const errorMessages = error.errors.map((err) => ({
+          field: err.path.join("."),
+          message: err.message,
+        }));
+
+        return res.status(STATUS_CODES.BAD_REQUEST).json({
+          statusCode: STATUS_CODES.BAD_REQUEST,
+          success: false,
+          message: "Validation failed",
+          errors: errorMessages,
+        });
+      }
+
+      return ResponseUtil.errorResponse(
+        res,
+        500,
+        "Internal server error"
+      );
+    }
+  };
+};

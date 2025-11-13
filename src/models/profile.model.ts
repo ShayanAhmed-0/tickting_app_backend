@@ -12,6 +12,25 @@ import {
 import { IAuth } from "./auth.model";
 import { IOffice } from "./office.model";
 
+// Interface for notification preferences
+export interface NotificationPreferences {
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  
+  // Category-specific preferences
+  bookingConfirmations: boolean;
+  tripReminders: boolean;
+  scheduleChanges: boolean;
+  emergencyAlerts: boolean;
+  promotions: boolean;
+  
+  // Reminder timing preferences
+  reminder24h: boolean;
+  reminder2h: boolean;
+  reminder30m: boolean;
+}
+
 // Interface definition
 export interface IProfile extends Document {
   auth: ObjectId | IAuth;
@@ -27,6 +46,7 @@ export interface IProfile extends Document {
   preferredLanguage: Language;
   documents: Documents;
   travelPreferences?: TravelPreferences;
+  notificationPreferences?: NotificationPreferences;
   refundAmount?: number;
   office?: ObjectId | IOffice;
   createdAt: Date;
@@ -48,7 +68,7 @@ const ProfileSchema = new Schema<IProfile>(
     lastName: { type: String },
     dob: { type: Date },
     gender: {
-      type: String, 
+      type: String,  
       enum: Object.values(Gender),
       default: Gender.PREFER_NOT_SAY,
     },
@@ -78,6 +98,19 @@ const ProfileSchema = new Schema<IProfile>(
         enum: ["window", "aisle", "front", "back", "none"],
         default: "none",
       },
+    },
+    notificationPreferences: {
+      pushEnabled: { type: Boolean, default: true },
+      emailEnabled: { type: Boolean, default: true },
+      smsEnabled: { type: Boolean, default: false },
+      bookingConfirmations: { type: Boolean, default: true },
+      tripReminders: { type: Boolean, default: true },
+      scheduleChanges: { type: Boolean, default: true },
+      emergencyAlerts: { type: Boolean, default: true },
+      promotions: { type: Boolean, default: false },
+      reminder24h: { type: Boolean, default: true },
+      reminder2h: { type: Boolean, default: true },
+      reminder30m: { type: Boolean, default: true },
     },
     office: {
       type: Schema.Types.ObjectId,
