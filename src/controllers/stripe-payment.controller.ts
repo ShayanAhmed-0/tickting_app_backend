@@ -343,18 +343,18 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       });
     }
 
-    // Check bus capacity and send notification to admins if >= 90%
+    // Queue bus capacity check and send notification to admins if >= 90% (non-blocking)
     // IMPORTANT: This runs AFTER passengers are created and seats are booked
     try {
-      console.log('🔍 Checking bus capacity after payment confirmation...');
-      await tripReminderService.checkBusCapacityForBooking(
+      console.log('🔍 Queueing bus capacity check after payment confirmation...');
+      await tripReminderService.queueBusCapacityCheckForBooking(
         getBus._id?.toString() || busId,
         routeId,
         new Date(departureDate || new Date())
       );
     } catch (capacityError) {
-      console.error('Error checking bus capacity:', capacityError);
-      // Don't fail the booking if capacity check fails
+      console.error('Error queueing bus capacity check:', capacityError);
+      // Don't fail the booking if capacity check queueing fails
     }
 
     // Generate individual QR codes for each passenger/seat
@@ -414,18 +414,18 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
       await redis.del(metadata.passengersRedisKey);
     }
 
-    // Send booking confirmation and payment receipt notifications
+    // Queue booking confirmation and payment receipt notifications (non-blocking)
     try {
       const seatNumbers = passengersData.map((p: any) => p.seatLabel);
       
-      // Send booking confirmation notification
-      await notificationService.sendBookingConfirmation(
+      // Queue booking confirmation notification (processed in background)
+      await notificationService.queueBookingConfirmation(
         userId,
         {
           bookingRef: groupTicketSerial || passengersDB[0].ticketNumber,
           origin: (getRoutePrice as any)?.origin?.name || "Origin",
           destination: (getRoutePrice as any)?.destination?.name || "Destination",
-          departureTime: new Date(departureDate),
+          departureTime: new Date(departureDate || new Date()),
           seatNumbers: seatNumbers,
           amount: paymentIntent.amount / 100,
           currency: paymentIntent.currency.toUpperCase(),
@@ -435,8 +435,8 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
         }
       );
 
-      // Send payment receipt notification
-      await notificationService.sendPaymentReceipt(
+      // Queue payment receipt notification (processed in background)
+      await notificationService.queuePaymentReceipt(
         userId,
         {
           bookingRef: groupTicketSerial || passengersDB[0].ticketNumber,
@@ -447,10 +447,10 @@ export const confirmStripePayment = async (req: CustomRequest, res: Response) =>
         }
       );
 
-      console.log('✅ Booking and payment notifications sent successfully');
+      console.log('✅ Booking and payment notifications queued successfully');
     } catch (notifError) {
-      console.error('❌ Error sending notifications:', notifError);
-      // Don't fail the booking if notification fails
+      console.error('❌ Error queueing notifications:', notifError);
+      // Don't fail the booking if notification queueing fails
     }
 // 
     // Return the same response format as cash payment

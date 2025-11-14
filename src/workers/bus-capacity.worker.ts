@@ -15,6 +15,21 @@ export const busCapacityWorker = new Worker(
           console.log('✅ Bus capacity check completed successfully');
           break;
 
+        case JobName.CHECK_BUS_CAPACITY_FOR_BOOKING:
+          const { busId, routeId, departureDate, passengersCount } = job.data;
+          // Convert departureDate back to Date if it's a string
+          const processedDepartureDate = departureDate instanceof Date 
+            ? departureDate 
+            : new Date(departureDate);
+          await tripReminderService.checkBusCapacityForBooking(
+            busId,
+            routeId,
+            processedDepartureDate,
+            passengersCount
+          );
+          console.log(`✅ Bus capacity check for booking completed (bus: ${busId}, route: ${routeId})`);
+          break;
+
         default:
           console.warn(`⚠️  Unknown bus capacity job: ${job.name}`);
       }

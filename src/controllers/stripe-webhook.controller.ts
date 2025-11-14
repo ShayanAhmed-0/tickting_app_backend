@@ -305,32 +305,32 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       }
     }
 
-    // Check bus capacity and send notification to admins if >= 90%
+    // Queue bus capacity check and send notification to admins if >= 90% (non-blocking)
     // IMPORTANT: This runs AFTER passengers are created and seats are booked
-    // Check for outbound trip
+    // Queue for outbound trip
     try {
-      console.log('🔍 Checking bus capacity after webhook booking completion...');
-      await tripReminderService.checkBusCapacityForBooking(
+      console.log('🔍 Queueing bus capacity check after webhook booking completion...');
+      await tripReminderService.queueBusCapacityCheckForBooking(
         getBus._id?.toString() || busId,
         routeId,
         new Date(departureDate)
       );
     } catch (capacityError) {
-      console.error('Error checking bus capacity for outbound trip:', capacityError);
-      // Don't fail the booking if capacity check fails
+      console.error('Error queueing bus capacity check for outbound trip:', capacityError);
+      // Don't fail the booking if capacity check queueing fails
     }
 
-    // Check for return trip if round trip
+    // Queue for return trip if round trip (non-blocking)
     if(tripType === "round_trip" && returnBus && returnRoute) {
       try {
-        await tripReminderService.checkBusCapacityForBooking(
+        await tripReminderService.queueBusCapacityCheckForBooking(
           returnBus._id?.toString() || returnBusId,
           returnRouteId || '',
           new Date(roundTripDate)
         );
       } catch (capacityError) {
-        console.error('Error checking bus capacity for return trip:', capacityError);
-        // Don't fail the booking if capacity check fails
+        console.error('Error queueing bus capacity check for return trip:', capacityError);
+        // Don't fail the booking if capacity check queueing fails
       }
     }
 
@@ -386,13 +386,13 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
     console.log('Passengers created:', passengersDB.length);
     console.log('Trip type:', tripType);
 
-    // Send booking confirmation and payment receipt notifications
+    // Queue booking confirmation and payment receipt notifications (non-blocking)
     try {
       const seatNumbers = passengersData.map((p: any) => p.seatLabel);
       const firstPassenger = passengersDB[0];
       
-      // Send booking confirmation notification
-      await notificationService.sendBookingConfirmation(
+      // Queue booking confirmation notification (processed in background)
+      await notificationService.queueBookingConfirmation(
         userId,
         {
           bookingRef: groupTicketSerial || firstPassenger.ticketNumber,
@@ -408,8 +408,8 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
         }
       );
 
-      // Send payment receipt notification
-      await notificationService.sendPaymentReceipt(
+      // Queue payment receipt notification (processed in background)
+      await notificationService.queuePaymentReceipt(
         userId,
         {
           bookingRef: groupTicketSerial || firstPassenger.ticketNumber,
@@ -420,10 +420,10 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
         }
       );
 
-      console.log('✅ Booking and payment notifications sent successfully');
+      console.log('✅ Booking and payment notifications queued successfully');
     } catch (notifError) {
-      console.error('❌ Error sending notifications:', notifError);
-      // Don't fail the booking if notification fails
+      console.error('❌ Error queueing notifications:', notifError);
+      // Don't fail the booking if notification queueing fails
     }
 
   } catch (error) {

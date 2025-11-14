@@ -5,6 +5,7 @@ import AuthModel from '../models/auth.model';
 import Profile from '../models/profile.model';
 import { NotificationCategory, NotificationType, DeliveryStatus, UserRole } from '../models/common/types';
 import { Types } from 'mongoose';
+import { notificationsQueue, JobName } from '../config/bullmq';
 
 export interface CreateNotificationOptions {
   userId?: string | Types.ObjectId;
@@ -603,6 +604,201 @@ class NotificationService {
       }
     } catch (error) {
       console.error('Error processing scheduled notifications:', error);
+    }
+  }
+
+  /**
+   * Queue booking confirmation notification (non-blocking)
+   * This queues the notification to be processed in the background by BullMQ
+   */
+  async queueBookingConfirmation(
+    userId: string,
+    bookingData: {
+      bookingRef: string;
+      origin: string;
+      destination: string;
+      departureTime: Date;
+      seatNumbers: string[];
+      amount: number;
+      currency: string;
+      bookingId: string;
+      tripId: string;
+      routeId: string;
+    }
+  ): Promise<void> {
+    try {
+      await notificationsQueue.add(
+        JobName.SEND_BOOKING_CONFIRMATION,
+        {
+          userId,
+          bookingData: {
+            ...bookingData,
+            departureTime: bookingData.departureTime instanceof Date 
+              ? bookingData.departureTime.toISOString() 
+              : bookingData.departureTime
+          }
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+        }
+      );
+      console.log(`📬 Booking confirmation queued for user ${userId}`);
+    } catch (error) {
+      console.error('Error queueing booking confirmation:', error);
+      // Don't throw - notification failure shouldn't break the booking flow
+    }
+  }
+
+  /**
+   * Queue payment receipt notification (non-blocking)
+   * This queues the notification to be processed in the background by BullMQ
+   */
+  async queuePaymentReceipt(
+    userId: string,
+    paymentData: {
+      bookingRef: string;
+      amount: number;
+      currency: string;
+      paymentId: string;
+      bookingId: string;
+    }
+  ): Promise<void> {
+    try {
+      await notificationsQueue.add(
+        JobName.SEND_PAYMENT_RECEIPT,
+        {
+          userId,
+          paymentData
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+        }
+      );
+      console.log(`📬 Payment receipt queued for user ${userId}`);
+    } catch (error) {
+      console.error('Error queueing payment receipt:', error);
+      // Don't throw - notification failure shouldn't break the payment flow
+    }
+  }
+
+  /**
+   * Queue notification to user (non-blocking)
+   * This queues the notification to be processed in the background by BullMQ
+   */
+  async queueToUser(options: CreateNotificationOptions): Promise<void> {
+    try {
+      await notificationsQueue.add(
+        JobName.SEND_NOTIFICATION,
+        {
+          userId: options.userId,
+          options: {
+            ...options,
+            scheduledFor: options.scheduledFor instanceof Date 
+              ? options.scheduledFor.toISOString() 
+              : options.scheduledFor,
+            expiresAt: options.expiresAt instanceof Date 
+              ? options.expiresAt.toISOString() 
+              : options.expiresAt,
+          }
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+        }
+      );
+      console.log(`📬 Notification queued for user ${options.userId}`);
+    } catch (error) {
+      console.error('Error queueing notification to user:', error);
+      // Don't throw - notification failure shouldn't break the flow
+    }
+  }
+
+  /**
+   * Queue notification to role (non-blocking)
+   * This queues notifications for all users with the specified role
+   */
+  async queueToRole(role: UserRole, options: Omit<CreateNotificationOptions, 'userId'>): Promise<void> {
+    try {
+      // Find all users with the specified role
+      const users = await AuthModel.find({ role, isActive: true });
+      
+      // Queue a notification job for each user
+      const queuePromises = users.map(user =>
+        this.queueToUser({
+          ...options,
+          userId: user._id.toString()
+        }).catch(err => {
+          console.error(`Failed to queue notification to user ${user._id}:`, err);
+          return null;
+        })
+      );
+
+      await Promise.all(queuePromises);
+      console.log(`📬 Notifications queued for ${users.length} users with role ${role}`);
+    } catch (error) {
+      console.error('Error queueing notifications to role:', error);
+      // Don't throw - notification failure shouldn't break the flow
+    }
+  }
+
+  /**
+   * Queue emergency notification (non-blocking)
+   * This queues emergency notifications for multiple users
+   */
+  async queueEmergencyNotification(
+    userIds: string[],
+    emergencyData: {
+      type: 'weather' | 'cancellation' | 'safety';
+      title: string;
+      message: string;
+      affectedRoutes?: string[];
+      alternativeOptions?: any[];
+    }
+  ): Promise<void> {
+    try {
+      const categoryMap = {
+        weather: NotificationCategory.EMERGENCY_WEATHER,
+        cancellation: NotificationCategory.EMERGENCY_CANCELLATION,
+        safety: NotificationCategory.EMERGENCY_SAFETY
+      };
+
+      // Queue a notification job for each user
+      const queuePromises = userIds.map(userId =>
+        this.queueToUser({
+          userId,
+          category: categoryMap[emergencyData.type],
+          title: `⚠️ ${emergencyData.title}`,
+          body: emergencyData.message,
+          metadata: {
+            screen: 'EmergencyAlert',
+            params: {},
+            affectedRoutes: emergencyData.affectedRoutes,
+            alternativeOptions: emergencyData.alternativeOptions
+          },
+          priority: 'high',
+          sendPush: true
+        }).catch(err => {
+          console.error(`Failed to queue emergency notification to user ${userId}:`, err);
+          return null;
+        })
+      );
+
+      await Promise.all(queuePromises);
+      console.log(`📬 Emergency notifications queued for ${userIds.length} users`);
+    } catch (error) {
+      console.error('Error queueing emergency notifications:', error);
+      // Don't throw - notification failure shouldn't break the flow
     }
   }
 }

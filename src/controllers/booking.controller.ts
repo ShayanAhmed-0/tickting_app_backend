@@ -214,32 +214,32 @@ export const bookSeats = async (req: CustomRequest, res: Response) => {
     let getTotalPrice = (baseFare * passengers.length) + parseFloat(additionalBaggage || 0);
     
 
+    // Queue bus capacity check for outbound trip (non-blocking)
     try {
-      console.log('🔍 Checking bus capacity after booking completion...');
-      await tripReminderService.checkBusCapacityForBooking(
+      console.log('🔍 Queueing bus capacity check after booking completion...');
+      await tripReminderService.queueBusCapacityCheckForBooking(
         getBus._id?.toString() || busId,
         routeId as string,
         new Date(departureDate),
         passengers.length
       );
     } catch (capacityError) {
-      console.error('Error checking bus capacity for outbound trip:', capacityError);
-      // Don't fail the booking if capacity check fails
+      console.error('Error queueing bus capacity check for outbound trip:', capacityError);
+      // Don't fail the booking if capacity check queueing fails
     }
-    // 
 
-    // Check for return trip if round trip
+    // Queue bus capacity check for return trip if round trip (non-blocking)
     if(tripType === TripType.ROUND_TRIP && returnBus && returnRoute) {
       try {
-        await tripReminderService.checkBusCapacityForBooking(
+        await tripReminderService.queueBusCapacityCheckForBooking(
           returnBus._id?.toString() || (returnRoute as any).bus,
           returnRoute._id?.toString() || '',
           new Date(roundTripDate),
           passengers.length
         );
       } catch (capacityError) {
-        console.error('Error checking bus capacity for return trip:', capacityError);
-        // Don't fail the booking if capacity check fails
+        console.error('Error queueing bus capacity check for return trip:', capacityError);
+        // Don't fail the booking if capacity check queueing fails
       }
     }
 

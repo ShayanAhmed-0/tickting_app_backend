@@ -252,7 +252,8 @@ export class NotificationController {
     try {
       const userId = req.authId;
 
-      await notificationService.sendToUser({
+      // Queue test notification (non-blocking)
+      await notificationService.queueToUser({
         userId,
         category: NotificationCategory.BOOKING_CONFIRMATION,
         title: 'Test Notification',
@@ -261,9 +262,9 @@ export class NotificationController {
         sendPush: true
       });
 
-      return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {}, 'Test notification sent successfully');
+      return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {}, 'Test notification queued successfully');
     } catch (err: any) {
-      console.error('Error sending test notification:', err);
+      console.error('Error queueing test notification:', err);
       return ResponseUtil.errorResponse(res, STATUS_CODES.INTERNAL_SERVER_ERROR, err.message);
     }
   }
@@ -293,9 +294,9 @@ export class NotificationController {
       }
 
       if (userIds && Array.isArray(userIds)) {
-        // Send to specific users
+        // Queue notifications to specific users (non-blocking)
         const promises = userIds.map((userId: string) =>
-          notificationService.sendToUser({
+          notificationService.queueToUser({
             userId,
             category,
             title,
@@ -309,8 +310,8 @@ export class NotificationController {
         );
         await Promise.all(promises);
       } else if (targetRole) {
-        // Send to all users with a specific role
-        await notificationService.sendToRole(targetRole, {
+        // Queue notifications to all users with a specific role (non-blocking)
+        await notificationService.queueToRole(targetRole, {
           category,
           title,
           body,
@@ -324,7 +325,7 @@ export class NotificationController {
         return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, 'Either userIds or targetRole is required');
       }
 
-      return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {}, 'Notification(s) sent successfully');
+      return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {}, 'Notification(s) queued successfully');
     } catch (err: any) {
       console.error('Error sending custom notification:', err);
       return ResponseUtil.errorResponse(res, STATUS_CODES.INTERNAL_SERVER_ERROR, err.message);
@@ -358,7 +359,8 @@ export class NotificationController {
         return ResponseUtil.errorResponse(res, STATUS_CODES.BAD_REQUEST, 'User IDs are required');
       }
 
-      await notificationService.sendEmergencyNotification(userIds, {
+      // Queue emergency notifications (non-blocking)
+      await notificationService.queueEmergencyNotification(userIds, {
         type,
         title,
         message,
@@ -366,7 +368,7 @@ export class NotificationController {
         alternativeOptions
       });
 
-      return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {}, 'Emergency notification sent successfully');
+      return ResponseUtil.successResponse(res, STATUS_CODES.SUCCESS, {}, 'Emergency notification queued successfully');
     } catch (err: any) {
       console.error('Error sending emergency notification:', err);
       return ResponseUtil.errorResponse(res, STATUS_CODES.INTERNAL_SERVER_ERROR, err.message);

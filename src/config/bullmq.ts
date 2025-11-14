@@ -40,8 +40,11 @@ export enum QueueName {
 export enum JobName {
   CHECK_TRIP_REMINDERS = 'check-trip-reminders',
   CHECK_BUS_CAPACITY = 'check-bus-capacity',
+  CHECK_BUS_CAPACITY_FOR_BOOKING = 'check-bus-capacity-for-booking',
   SEND_NOTIFICATION = 'send-notification',
   PROCESS_SCHEDULED_NOTIFICATIONS = 'process-scheduled-notifications',
+  SEND_BOOKING_CONFIRMATION = 'send-booking-confirmation',
+  SEND_PAYMENT_RECEIPT = 'send-payment-receipt',
 }
 
 // Create queues

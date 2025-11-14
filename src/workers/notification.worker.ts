@@ -18,11 +18,40 @@ export const notificationWorker = new Worker(
         case JobName.SEND_NOTIFICATION:
           // Handle individual notification sending if needed
           const { userId, options } = job.data;
+          // Convert Date strings back to Date objects if needed
+          const processedOptions = {
+            ...options,
+            scheduledFor: options.scheduledFor 
+              ? (options.scheduledFor instanceof Date ? options.scheduledFor : new Date(options.scheduledFor))
+              : undefined,
+            expiresAt: options.expiresAt 
+              ? (options.expiresAt instanceof Date ? options.expiresAt : new Date(options.expiresAt))
+              : undefined,
+          };
           await notificationService.sendToUser({
             userId,
-            ...options,
+            ...processedOptions,
           });
           console.log(`✅ Notification sent to user ${userId}`);
+          break;
+
+        case JobName.SEND_BOOKING_CONFIRMATION:
+          const { userId: bookingUserId, bookingData } = job.data;
+          // Convert departureTime back to Date if it's a string
+          const processedBookingData = {
+            ...bookingData,
+            departureTime: bookingData.departureTime instanceof Date 
+              ? bookingData.departureTime 
+              : new Date(bookingData.departureTime)
+          };
+          await notificationService.sendBookingConfirmation(bookingUserId, processedBookingData);
+          console.log(`✅ Booking confirmation sent to user ${bookingUserId}`);
+          break;
+
+        case JobName.SEND_PAYMENT_RECEIPT:
+          const { userId: receiptUserId, paymentData } = job.data;
+          await notificationService.sendPaymentReceipt(receiptUserId, paymentData);
+          console.log(`✅ Payment receipt sent to user ${receiptUserId}`);
           break;
 
         default:

@@ -5,6 +5,7 @@ import PassengerModel from '../models/passenger.models';
 import BusModel from '../models/bus.model';
 import RouteModel from '../models/route.model';
 import mongoose from 'mongoose';
+import { busCapacityQueue, JobName } from '../config/bullmq';
 
 interface TripReminderJob {
   checkAndSendReminders(): Promise<void>;
@@ -436,6 +437,42 @@ class TripReminderService implements TripReminderJob {
     } catch (error) {
       console.error('❌ Error checking bus capacity for booking:', error);
       // Don't throw - this is a background check and shouldn't fail the booking
+    }
+  }
+
+  /**
+   * Queue bus capacity check for booking (non-blocking)
+   * This queues the capacity check to be processed in the background by BullMQ
+   */
+  async queueBusCapacityCheckForBooking(
+    busId: string,
+    routeId: string,
+    departureDate: Date,
+    passengersCount?: number
+  ): Promise<void> {
+    try {
+      await busCapacityQueue.add(
+        JobName.CHECK_BUS_CAPACITY_FOR_BOOKING,
+        {
+          busId,
+          routeId,
+          departureDate: departureDate instanceof Date 
+            ? departureDate.toISOString() 
+            : departureDate,
+          passengersCount
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+        }
+      );
+      console.log(`📬 Bus capacity check queued for bus ${busId}, route ${routeId}`);
+    } catch (error) {
+      console.error('Error queueing bus capacity check:', error);
+      // Don't throw - capacity check failure shouldn't break the booking flow
     }
   }
 
